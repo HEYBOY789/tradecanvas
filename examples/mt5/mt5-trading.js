@@ -237,9 +237,7 @@ export function createMt5Trading(getActiveWidget) {
     if (!ticket.open(owner, { quantity: quickLots.get(symbol) || quote.min, ...initial })) return;
     projection?.destroy();
     projection = orderProjection(owner, ticket.read, (field, value) => ticket.change(field, value, 'projection'), ticket.submit, ticket.close,
-      () => bracketModes.get(owner)?.active, row => ticket.update(row, 'projection'), () => {
-        ticket.update({ timeInForce: 'specified', expiresAt: ticket.read().draft.expiresAt || Date.now() + 3600000 });
-      });
+      () => bracketModes.get(owner)?.active, row => ticket.update(row, 'projection'));
   }
 
   function editExpiry(row, kind, owner = getActiveWidget()) {
@@ -407,7 +405,7 @@ export function createMt5Trading(getActiveWidget) {
         if (row.takeProfit != null) intent.takeProfit = moved.takeProfit;
       } else intent[field] = moved[field];
       return review('modifyOrder', intent, row.symbol, accountId).catch(report);
-    }, () => busy || reviewOpen, activate, () => mode.active, report, target => editExpiry(target.row, target.kind, widget));
+    }, () => busy || reviewOpen, activate, () => mode.active, report);
     const deadlines = expiryChart(widget, () => ({ accountId: state?.account.id, rows: [
       ...[...(state?.orders || []), ...(state?.positions || [])].filter(row => row.symbol === widget.getSymbol() && row.expiresAt)
         .map(row => ({ ...row, kind: row.entryPrice != null ? 'position' : 'order' })),

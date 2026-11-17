@@ -1,8 +1,8 @@
 import { tradeGestures } from './order-gestures.js';
 
-export function orderProjection(widget, read, change, submit, cancel, bracketMode, update, editExpiry) {
+export function orderProjection(widget, read, change, submit, cancel, bracketMode, update) {
   return tradeGestures(widget, {
-    draft: true, disabled: () => read().sending, change, submit, cancel, bracketMode, update, editExpiry,
+    draft: true, disabled: () => read().sending, change, submit, cancel, bracketMode, update,
     read() {
       const current = read(), draft = current.draft;
       return { quote: current.quote, accountId: current.accountId, quantity: current.estimate?.quantity, sending: current.sending,
@@ -12,10 +12,10 @@ export function orderProjection(widget, read, change, submit, cancel, bracketMod
   });
 }
 
-export function pendingStopHandles(widget, read, complete, disabled, activate, bracketMode, error, editExpiry) {
+export function pendingStopHandles(widget, read, complete, disabled, activate, bracketMode, error) {
   const chart = widget.getChart();
   return tradeGestures(widget, {
-    disabled, activate, bracketMode, error, editExpiry,
+    disabled, activate, bracketMode, error,
     read() {
       const current = read();
       return { quote: current.quote, accountId: current.accountId, blockedPrices: current.draftPrices,

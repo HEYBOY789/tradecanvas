@@ -102,10 +102,6 @@
 .mt5-projection-send { cursor: pointer; color: #fff !important; background: #2962ff !important; border-color: #2962ff !important; }
 .mt5-projection-send[data-side="sell"] { background: #f23645 !important; border-color: #f23645 !important; }
 .mt5-projection-cancel { cursor: pointer; }
-.mt5-line-switches { position: absolute; display: flex; gap: 3px; right: 4px; top: -20px; transform: translateY(-100%); z-index: 2; pointer-events: auto; }
-.mt5-line-switches > button { cursor: pointer; background: var(--tcw-bg, #131722); color: var(--tcw-text, #d1d4dc); border: 1px solid var(--tcw-border, #4c5262); border-radius: 3px; padding: 2px 5px; font: 10px 'Segoe UI', sans-serif; }
-.mt5-line-switches > button[aria-checked=true] { border-color: #2962ff; color: #2962ff; }
-.mt5-ghost-stop { opacity: .6; border-top-style: dotted; }
 .mt5-live-entry { border-top-color: transparent; }
 .mt5-live-entry > .mt5-projection-tag { visibility: hidden; }
 .mt5-native-level { border-top-color: transparent; }

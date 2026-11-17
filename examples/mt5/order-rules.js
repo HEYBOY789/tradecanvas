@@ -74,9 +74,3 @@ export function projectOrder(original, field, value, q, kind = 'draft') {
   }
   return row;
 }
-
-export function suggestedStop(row, field, q) {
-  const at = reference(row, q, row.entryPrice != null ? 'position' : 'draft');
-  const distance = Math.max(stopDistance(q) * 2, (q.ask - q.bid) * 3, at * .001);
-  return roundPrice(at + ((field === 'takeProfit') === (row.side === 'buy') ? distance : -distance), q);
-}

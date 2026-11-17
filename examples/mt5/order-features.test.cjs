@@ -9,11 +9,11 @@ async function viewport(page) {
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
 }
-async function drag(page, locator, dy, dx = 0, beforeUp) {
+async function drag(page, locator, dy, dx = 0, beforeUp, button = 'left') {
   const rect = await locator.boundingBox(); assert.ok(rect);
-  await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2); await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2); await page.mouse.down({ button });
   await page.mouse.move(rect.x + rect.width / 2 + dx, rect.y + rect.height / 2 + dy, { steps: 7 });
-  if (beforeUp) await beforeUp(); await page.mouse.up();
+  if (beforeUp) await beforeUp(); await page.mouse.up({ button });
 }
 
 test('invalid pending placement is disabled locally and quick controls keep One-click in settings', async () => {
@@ -32,27 +32,34 @@ test('invalid pending placement is disabled locally and quick controls keep One-
   } finally { await browser.close(); }
 });
 
-test('TP/SL switches only preview: draft values and broker stops change on release, never on toggle', async () => {
+test('middle-drag previews stay local until release with no floating TP/SL/deadline controls', async () => {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
     const { page, fixture } = await tradingPage(browser);
     fixture.orders = []; fixture.positions[0].stopLoss = null; fixture.positions[0].takeProfit = null;
     await page.waitForFunction(() => testGrid.getWidget(0).getChart().getOrders().length === 0 && testGrid.getWidget(0).getChart().getPositions()[0].stopLoss == null);
     await setOneClick(page); await viewport(page);
-    await page.getByRole('switch', { name: 'Xem trước SL lệnh 123', exact: true }).click();
-    const sl = page.getByRole('button', { name: 'Kéo SL lệnh 123', exact: true }); await sl.waitFor();
-    assert.equal(fixture.checked.length, 0); assert.equal(fixture.positions[0].stopLoss, null);
+    assert.equal(await page.locator('.mt5-line-switches').count(), 0);
+    const entry = await page.evaluate(async () => {
+      const { priceToY } = await import('/vendor/core/index.js');
+      const widget = testGrid.getWidget(0), viewport = widget.getChart().viewport.getState(), rect = widget.chartContainer.getBoundingClientRect();
+      return { x: rect.left + viewport.chartRect.x + viewport.chartRect.width / 2, y: rect.top + priceToY(3800, viewport) };
+    });
     const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/trading/execute');
-    await drag(page, sl, 20, 0, async () => { assert.equal(fixture.executed.length, 0); }); await response;
+    await page.mouse.move(entry.x, entry.y); await page.mouse.down({ button: 'middle' });
+    await page.mouse.move(entry.x, entry.y + 30, { steps: 7 });
+    assert.equal(fixture.checked.length, 0); assert.equal(fixture.positions[0].stopLoss, null);
+    await page.mouse.up({ button: 'middle' }); await response;
     assert.ok(fixture.positions[0].stopLoss < 3800);
     await page.waitForFunction(() => !document.querySelector('[aria-label="Mua nhanh MT5"]').disabled);
     await page.getByRole('button', { name: 'Đặt lệnh MT5', exact: true }).click();
     const ticket = page.locator('#mt5-ticket:not([hidden])');
     await ticket.getByRole('tab', { name: 'Limit', exact: true }).click(); await ticket.locator('[name=price]').fill('3760');
-    await viewport(page); await page.getByRole('switch', { name: 'Xem trước TP lệnh nháp', exact: true }).click();
+    await viewport(page);
+    assert.equal(await page.locator('.mt5-line-switches').count(), 0);
     assert.equal(await ticket.locator('[name=takeProfit]').inputValue(), '');
-    await drag(page, page.getByRole('button', { name: 'Kéo TP lệnh nháp', exact: true }), -20, 0,
-      async () => { assert.equal(await ticket.locator('[name=takeProfit]').inputValue(), ''); });
+    await drag(page, page.getByRole('button', { name: 'Kéo Entry lệnh nháp', exact: true }), -20, 0,
+      async () => { assert.equal(fixture.executed.length, 1); }, 'middle');
     assert.ok(Number(await ticket.locator('[name=takeProfit]').inputValue()) > 3760);
     assert.equal(fixture.executed.length, 1); assert.deepEqual(fixture.errors, []);
   } finally { await browser.close(); }
@@ -64,7 +71,9 @@ test('expiry applies to filled positions and drafts, uses chart timezone and can
     const { page, fixture } = await tradingPage(browser);
     await page.evaluate(() => testGrid.getWidget(0).setSettings({ timezone: 'Asia/Ho_Chi_Minh' }));
     await viewport(page);
-    await page.getByRole('button', { name: 'Thời hạn lệnh 123', exact: true }).click();
+    await page.getByRole('button', { name: 'Vị thế MT5', exact: true }).click();
+    const accountPanel = page.locator('#mt5-account');
+    await accountPanel.locator('tr').filter({ hasText: '123 · XAUUSDm' }).getByRole('button', { name: 'Thời hạn', exact: true }).click();
     const editor = page.getByRole('dialog', { name: 'Thời hạn #123', exact: true }); await editor.waitFor();
     await editor.getByLabel('Định dạng giờ', { exact: true }).selectOption('12h');
     await editor.getByLabel('Ngày hết hạn', { exact: true }).fill('2027-01-05');
@@ -74,6 +83,7 @@ test('expiry applies to filled positions and drafts, uses chart timezone and can
     assert.match(await review.textContent(), /Asia\/Ho_Chi_Minh/);
     await review.getByRole('button', { name: 'Gửi tới MT5', exact: true }).click();
     await review.waitFor({ state: 'detached' }); await editor.waitFor({ state: 'detached' });
+    await accountPanel.getByRole('button', { name: 'Đóng', exact: true }).click();
     assert.equal(fixture.executed.at(-1).action, 'setExpiry');
     assert.equal(fixture.executed.at(-1).intent.expiresAt, Date.UTC(2027, 0, 5, 16, 30));
     await page.getByRole('button', { name: 'Đặt lệnh MT5', exact: true }).click();
