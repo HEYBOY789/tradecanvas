@@ -51,9 +51,9 @@ Under **Chart Settings → Symbol → Last price**, **Đường giá** controls 
 
 ## Seasonal session hours
 
-In **All-In-One Sessions → Phiên giao dịch → London / New York**, enable **Tự đổi giờ mùa đông/hè** and enter the session's **summer hours** in **Múi giờ phiên**. With a fixed GMT/UTC offset, winter moves both boundaries one hour later. The option defaults off, so old layouts and manually configured hours retain their behavior; each indicator instance saves it independently, including a Sessions instance on CVD.
+In **All-In-One Sessions → Phiên giao dịch**, each of **Châu Á, London and New York** has a **Mùa áp dụng** dropdown and separate editable start/end pairs for **Mùa hè** and **Mùa đông**. All four times use **Múi giờ phiên**. The chosen season is manual and applies to the entire displayed history. Each session and each indicator instance saves both pairs and its selection independently, including a Sessions instance on CVD.
 
-The UK and US calendars are evaluated separately for each bar's historical date, including the weeks when only one market has switched. Session boxes, opening lines, previous-session Fibonacci and retained history all use the same adjusted range. Overnight shifts preserve the session date; a display timezone that already observes DST is compensated rather than shifted twice. The Asian session retains its entered schedule. Calendar references: [UK clock changes](https://www.gov.uk/when-do-the-clocks-change), [NIST US DST rules](https://www.nist.gov/pml/time-and-frequency-division/popular-links/daylight-saving-time-dst).
+Old layouts retain their entered hours as the summer pair and initially select summer. Missing winter fields are suggested once from the saved pair: one hour later for London/New York, unchanged for Asia. Either pair can then be edited freely, including overnight hours. The former automatic DST option is discarded. Session boxes, opening lines, previous-session Fibonacci and retained history all use the selected pair; the six custom level windows retain their existing single pair of hours.
 
 ## Sessions Fibonacci history
 

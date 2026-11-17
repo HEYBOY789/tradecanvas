@@ -1,4 +1,4 @@
-import { SESSION_DST_ZONES } from './session-dst.js';
+import { SESSION_SEASONS, withSessionSeasons } from './session-seasons.js';
 
 const STORAGE_KEY = 'mt5:texmoonbeam-sessions:v1';
 const GREEN = '#4caf50';
@@ -57,10 +57,10 @@ export const DEFAULTS = {
       fibonacciColors: { ...FIBONACCI_COLORS }, fibonacciDirection: 'Low → High',
     }),
   }])),
-  sessions: Object.fromEntries(SESSIONS.map(([id, , start, end, color]) => [id, {
+  sessions: Object.fromEntries(SESSIONS.map(([id, , start, end, color]) => [id, withSessionSeasons(id, undefined, {
     enabled: true, start, end, color, openColor: color, extend: false, showOpen: false,
-    fibonacci: true, ...(SESSION_DST_ZONES[id] ? { autoDst: false } : {}),
-  }])),
+    fibonacci: true,
+  })])),
   custom: Array.from({length: 6}, (_, i) => {
     const [start, end] = customTimes[i % customTimes.length];
     return { enabled: false, label: '', type: 'high', start, end, days: '23456',
@@ -68,7 +68,7 @@ export const DEFAULTS = {
   }),
 };
 
-function migratePeriodFibonacci(snapshot) {
+function migrateSettings(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') return snapshot;
   const periods = { ...snapshot.periods };
   for (const [id, , , , , open] of PERIODS) {
@@ -85,7 +85,10 @@ function migratePeriodFibonacci(snapshot) {
       } : {}),
     };
   }
-  return { ...snapshot, periods };
+  const sessions = Object.fromEntries(SESSIONS.map(([id]) => [id,
+    withSessionSeasons(id, snapshot.sessions?.[id], DEFAULTS.sessions[id]),
+  ]));
+  return { ...snapshot, periods, sessions };
 }
 
 export function createSessionSettings(validateZone) {
@@ -96,7 +99,7 @@ export function createSessionSettings(validateZone) {
   let editing;
   let saved;
   try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { /* Default settings. */ }
-  saved = migratePeriodFibonacci(saved);
+  saved = migrateSettings(saved);
   // Previous versions stored the header toggle as `active`.
   let placement = {
     present: saved?.placement?.present !== false,
@@ -168,6 +171,22 @@ export function createSessionSettings(validateZone) {
     field(parent, [...path, 'end'], 'Kết thúc', 'time', { required: true });
   }
 
+  function seasonalHours(parent, path) {
+    const choice = field(parent, [...path, 'season'], 'Mùa áp dụng', 'select', SESSION_SEASONS);
+    choice.setAttribute('aria-label', 'Mùa áp dụng');
+    choice.parentElement.className = 'sessions-season-choice';
+    const pairs = element(parent, 'div');
+    pairs.className = 'sessions-season-hours';
+    for (const [title, suffix, start, end] of [
+      ['Mùa hè', 'mùa hè', 'start', 'end'], ['Mùa đông', 'mùa đông', 'winterStart', 'winterEnd'],
+    ]) {
+      const pair = element(pairs, 'fieldset');
+      element(pair, 'legend', title);
+      field(pair, [...path, start], 'Bắt đầu', 'time', { required: true }).setAttribute('aria-label', `Bắt đầu ${suffix}`);
+      field(pair, [...path, end], 'Kết thúc', 'time', { required: true }).setAttribute('aria-label', `Kết thúc ${suffix}`);
+    }
+  }
+
   function lineStyle(parent, path, widthKey = 'width', styleKey = 'style', min = .05) {
     field(parent, [...path, widthKey], 'Độ dày', 'number', { min, max: min ? '4' : '', step: .05, required: true });
     field(parent, [...path, styleKey], 'Kiểu nét', 'select', styles);
@@ -223,17 +242,14 @@ export function createSessionSettings(validateZone) {
   checks(sessions, [], [['history', 'Giữ hộp phiên cũ']]);
   lineStyle(sessions, [], 'borderWidth', 'borderStyle', 0);
   field(sessions, ['transparency'], 'Độ trong nền (%)', 'number', { min: 0, max: 100, required: true });
+  const seasonHint = element(sessions, 'small', 'Giờ theo Múi giờ phiên. Chọn mùa thủ công cho từng phiên; mùa đã chọn áp dụng cho cả lịch sử.');
+  seasonHint.className = 'sessions-season-hint';
   for (const [id, title] of SESSIONS) {
     const controls = group(sessions, title);
     const path = ['sessions', id];
     checks(controls, path, [['enabled', 'Hiện hộp'], ['extend', 'Kéo dài sang phải'], ['showOpen', 'Giá mở phiên']]);
     checks(controls, path, [['fibonacci', 'Fibo phiên trước']]);
-    if (SESSION_DST_ZONES[id]) {
-      field(controls, [...path, 'autoDst'], 'Tự đổi giờ mùa đông/hè', 'checkbox');
-      const hint = element(controls, 'small', `Nhập giờ mùa hè. Mùa đông tự +1 giờ theo lịch ${title} khi dùng GMT/UTC cố định. Tính theo ngày từng nến, kể cả lịch sử; múi giờ địa phương có DST được tính bù.`);
-      hint.className = 'sessions-dst-hint';
-    }
-    hours(controls, path);
+    seasonalHours(controls, path);
     field(controls, [...path, 'color'], 'Màu hộp', 'color');
     field(controls, [...path, 'openColor'], 'Màu giá mở', 'color');
   }
@@ -276,7 +292,7 @@ export function createSessionSettings(validateZone) {
   }
 
   function normalize(snapshot) {
-    snapshot = migratePeriodFibonacci(snapshot);
+    snapshot = migrateSettings(snapshot);
     if (typeof snapshot?.zone === 'string' && !zoneOptions.includes(snapshot.zone)) {
       try {
         validateZone(snapshot.zone);
