@@ -1,0 +1,14 @@
+{
+  "name": "mt5-tradecanvas",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test:unit": "node --test order-model.test.cjs cvd-history.test.cjs sessions-fibonacci.test.cjs sessions-fibonacci-drawing.test.cjs",
+    "test:trading": "node --test --test-concurrency=1 mt5-trading.test.cjs order-panel.test.cjs order-visual.test.cjs",
+    "test:layouts": "node --test --test-concurrency=1 shared-layouts.test.cjs layout-transfer.test.cjs layout-persistence.test.cjs grid-crosshair.test.cjs",
+    "test:bridge": "python -m unittest -v test_mt5_trading.py test_layout_store.py"
+  },
+  "dependencies": { "@tradecanvas/chart": "2.12.0" },
+  "devDependencies": { "playwright": "1.62.1" }
+}

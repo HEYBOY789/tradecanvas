@@ -1,0 +1,106 @@
+#workspace { min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+#workspace.has-order-ticket { grid-template-columns: minmax(0, 1fr) 370px; }
+#mt5-ticket {
+  --mt5-panel: #131722; --mt5-text: #d1d4dc; --mt5-muted: #9598a1; --mt5-border: #2a2e39;
+  --mt5-input: #1e222d; --mt5-buy: #2962ff; --mt5-sell: #f23645;
+  --mt5-buy-tint: #2962ff20; --mt5-sell-tint: #f2364520;
+  display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden;
+  color: var(--mt5-text); background: var(--mt5-panel); border-left: 1px solid var(--mt5-border);
+  font: 13px Inter, 'Segoe UI', sans-serif; color-scheme: dark;
+}
+#mt5-ticket[hidden] { display: none; }
+#mt5-ticket[data-floating="true"] { position: absolute; z-index: 80; top: 0; right: 0; bottom: 0; width: min(370px, 94vw); }
+#mt5-ticket[data-theme="light"] {
+  --mt5-panel: #fff; --mt5-text: #131722; --mt5-muted: #787b86; --mt5-border: #e0e3eb;
+  --mt5-input: #f7f8fa; color-scheme: light;
+}
+#mt5-ticket * { box-sizing: border-box; }
+.order-ticket-header { display: flex; align-items: center; gap: 12px; padding: 15px 18px 6px; }
+.order-ticket-header > strong { margin-right: auto; font-size: 18px; }
+#mt5-ticket button, #mt5-ticket input, #mt5-ticket select { font: inherit; }
+#mt5-ticket button { cursor: pointer; }
+.order-ticket-close { border: 0; background: transparent; color: var(--mt5-text); font-size: 27px !important; padding: 0 3px; }
+.order-ticket-account { font-size: 11px; color: var(--mt5-muted); padding: 0 18px 13px; border-bottom: 1px solid var(--mt5-border); }
+.order-ticket-settings { position: relative; font-size: 11px; }
+.order-ticket-settings > summary { cursor: pointer; list-style: none; color: var(--mt5-muted); }
+.order-ticket-settings[open] { z-index: 10; }
+.order-ticket-settings[open] > label, .order-ticket-settings[open] > p {
+  position: absolute; width: 270px; right: 0; padding: 12px; margin: 0;
+  background: var(--mt5-panel); border: 1px solid var(--mt5-border);
+}
+.order-ticket-settings[open] > label { top: 25px; }
+.order-ticket-settings[open] > p { top: 67px; line-height: 1.5; font-size: 12px; }
+.order-ticket-form { display: flex; flex-direction: column; min-height: 0; flex: 1; margin: 0; }
+.order-ticket-content { overflow: auto; min-height: 0; padding: 16px 18px 8px; scrollbar-width: thin; }
+.order-ticket-content > * { margin-bottom: 17px; }
+.order-ticket-sides { display: grid; grid-template-columns: 1fr 1fr; position: relative; border-radius: 8px; overflow: hidden; background: var(--mt5-input); }
+.order-ticket-sides > button { display: grid; gap: 4px; padding: 13px; border: 1px solid transparent; border-radius: 8px; background: transparent; text-align: left; color: var(--mt5-sell); }
+.order-ticket-sides > button[data-side="buy"] { color: var(--mt5-buy); text-align: right; }
+.order-ticket-sides > button[data-side="buy"][aria-pressed="true"] { background: var(--mt5-buy-tint); border-color: var(--mt5-buy); }
+.order-ticket-sides > button[data-side="sell"][aria-pressed="true"] { background: var(--mt5-sell-tint); border-color: var(--mt5-sell); }
+.order-ticket-sides strong { font-size: 21px; font-weight: 500; }
+.order-ticket-sides span { font-size: 12px; font-weight: 600; }
+.order-ticket-spread { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 3px 5px; border-radius: 5px; background: var(--mt5-panel); color: var(--mt5-muted); font-size: 10px !important; font-weight: 400 !important; pointer-events: none; }
+.order-ticket-tabs { display: flex; border-bottom: 1px solid var(--mt5-border); }
+.order-ticket-tabs > button { flex: 1; background: none; color: var(--mt5-muted); border: 0; border-bottom: 3px solid transparent; padding: 12px 2px; font-size: 13px; white-space: nowrap; }
+.order-ticket-tabs > button[aria-selected="true"] { border-bottom-color: var(--mt5-buy); color: var(--mt5-text); }
+.order-ticket-tabs > button:disabled { opacity: .35; cursor: default; }
+#mt5-ticket select { color: var(--mt5-muted); border: 0; background: var(--mt5-panel); padding: 3px 0; max-width: 100%; }
+#mt5-ticket select[name="quantityMode"] { margin-bottom: 7px; }
+.order-ticket-number { min-height: 43px; border: 1px solid var(--mt5-border); border-radius: 6px; display: flex; align-items: center; padding: 0 11px; gap: 7px; }
+#mt5-ticket .order-ticket-number:focus-within { border-color: var(--mt5-buy); }
+#mt5-ticket input[type="number"] { width: 100%; min-width: 0; border: 0; padding: 10px 0; outline: none; color: var(--mt5-text); background: none; }
+#mt5-ticket input:disabled { opacity: .35; }
+.order-ticket-number > span { white-space: nowrap; font-size: 11px; }
+.order-ticket-muted { color: var(--mt5-muted); font-size: 11px; }
+.order-ticket-field-head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; color: var(--mt5-muted); }
+.order-ticket-field-head > select { font-size: 11px !important; }
+.order-ticket-field-head > input { margin-left: auto; accent-color: var(--mt5-buy); width: 30px; height: 18px; cursor: pointer; }
+.order-ticket-field-head > input[role="switch"] { appearance: none; border-radius: 12px; background: #63666f; position: relative; flex: none; }
+.order-ticket-field-head > input[role="switch"]::before { content: ''; position: absolute; width: 14px; height: 14px; background: #fff; border-radius: 50%; left: 2px; top: 2px; transition: transform .12s ease; }
+.order-ticket-field-head > input[role="switch"]:checked { background: var(--mt5-buy); }
+.order-ticket-field-head > input[role="switch"]:checked::before { transform: translateX(12px); }
+.order-ticket-price-group { margin-bottom: 16px; }
+.order-ticket-exits, .order-ticket-receipt { border-top: 1px solid var(--mt5-border); padding-top: 16px; }
+#mt5-ticket h3 { margin: 0 0 15px; font-size: 15px; font-weight: 600; }
+.order-ticket-receipt > div { display: flex; justify-content: space-between; gap: 10px; margin: 11px 0; font-size: 12px; }
+.order-ticket-receipt > div > span { color: var(--mt5-muted); }
+.order-ticket-receipt strong { font-weight: 500; white-space: nowrap; }
+.order-ticket-tif { display: grid; gap: 6px; color: var(--mt5-muted); font-size: 12px; }
+#mt5-ticket .order-ticket-tif > select { border: 1px solid var(--mt5-border); padding: 10px; border-radius: 6px; color: var(--mt5-text); }
+.order-ticket-presets { border-top: 1px solid var(--mt5-border); padding-top: 13px; }
+.order-ticket-presets > summary { cursor: pointer; color: var(--mt5-muted); font-size: 12px; margin-bottom: 8px; }
+#mt5-ticket .order-ticket-presets input, #mt5-ticket .order-ticket-presets button, #mt5-ticket .order-ticket-presets select { border: 1px solid var(--mt5-border); border-radius: 5px; padding: 7px; margin: 3px 2px 3px 0; background: var(--mt5-input); color: var(--mt5-text); max-width: 100%; }
+.order-ticket-error, .order-ticket-warning { font-size: 11px; line-height: 1.5; margin: 8px 0; color: #e9a856; }
+.order-ticket-error:empty, .order-ticket-warning:empty { display: none; }
+.order-ticket-submit { flex: none; margin: 12px 18px 18px; border: 0; border-radius: 9px; padding: 13px 10px; display: grid; gap: 5px; color: #fff; background: var(--mt5-buy); }
+.order-ticket-submit[data-side="sell"] { background: var(--mt5-sell); }
+.order-ticket-submit > strong { font-size: 16px; font-weight: 600; }
+.order-ticket-submit > span { font-size: 12px; }
+.order-ticket-submit:disabled { cursor: default; opacity: .45; }
+.mt5-quick-trade { position: absolute; z-index: 5; display: flex; align-items: stretch; pointer-events: auto; font: 11px Inter, 'Segoe UI', sans-serif; border-radius: 5px; overflow: hidden; background: var(--tcw-bg, #131722); border: 1px solid var(--tcw-border, #2a2e39); }
+.mt5-quick-trade > button { cursor: pointer; padding: 5px 8px; display: grid; gap: 3px; border: 0; background: transparent; font: inherit; min-width: 72px; }
+.mt5-quick-trade > button[data-side="sell"] { color: #f23645; border-right: 1px solid #f2364540; }
+.mt5-quick-trade > button[data-side="buy"] { color: #2962ff; border-left: 1px solid #2962ff40; }
+.mt5-quick-trade > button:disabled { opacity: .4; }
+.mt5-quick-trade input[type="number"] { width: 60px; min-width: 0; border: 0; background: transparent; color: var(--tcw-text, #d1d4dc); text-align: center; font: inherit; }
+.mt5-quick-trade label { display: flex; align-items: center; gap: 2px; padding: 0 4px; color: var(--tcw-text, #d1d4dc); white-space: nowrap; }
+.mt5-quick-trade input[type="checkbox"] { width: 12px; height: 12px; accent-color: #2962ff; }
+.mt5-projection { position: absolute; pointer-events: none; overflow: hidden; z-index: 4; }
+.mt5-live-stops { z-index: 3; }
+.mt5-projection-line { position: absolute; width: 100%; border-top: 1px dashed #2962ff; display: flex; justify-content: flex-end; align-items: center; padding-right: 4px; color: #2962ff; }
+.mt5-projection-stopLoss { border-color: #f23645; color: #f23645; }
+.mt5-projection-takeProfit { border-color: #089981; color: #089981; }
+.mt5-projection-stopPrice { border-color: #ff9800; color: #ff9800; }
+.mt5-projection-line > button { pointer-events: auto; transform: translateY(-50%); margin: 0; padding: 4px 6px; background: #131722; color: inherit; border: 1px solid currentColor; font: 11px Inter, 'Segoe UI', sans-serif; border-radius: 3px; touch-action: none; }
+.mt5-projection-tag { cursor: ns-resize; }
+.mt5-projection-send { cursor: pointer; color: #fff !important; background: #2962ff !important; border-color: #2962ff !important; }
+.mt5-projection-send[data-side="sell"] { background: #f23645 !important; border-color: #f23645 !important; }
+.mt5-projection-cancel { cursor: pointer; }
+.mt5-projection[hidden], .mt5-projection-line[hidden], .order-ticket-content [hidden] { display: none !important; }
+@media (max-width: 760px) {
+  #workspace.has-order-ticket { grid-template-columns: minmax(0, 1fr); }
+  #mt5-ticket { position: fixed; z-index: 80; top: 0; right: 0; bottom: 0; width: min(370px, 94vw); box-shadow: -8px 0 25px #0005; }
+  .mt5-quick-trade > button { min-width: 60px; }
+  .mt5-quick-trade label { font-size: 9px; }
+}

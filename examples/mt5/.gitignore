@@ -1,0 +1,10 @@
+node_modules/
+__pycache__/
+.trading-key
+.trading-requests.sqlite3*
+layouts/
+.venv/
+.deps/
+*.log
+*-preview.png
+artifacts/
