@@ -5,7 +5,7 @@ exports.tradingPage = async function tradingPage(browser, options = {}) {
   const errors = [], checked = [], executed = [], estimates = [];
   const account = { id: 'mock-account', login: 'TEST-ONLY', server: 'Mock Broker', demo: true, currency: 'USD',
     balance: 10000, equity: 10010, marginFree: 9000, profit: 10, leverage: 100, allowed: true, reason: '' };
-  const fixture = { account, errors, checked, executed, estimates, fail: false, delay: 0,
+  const fixture = { account, errors, checked, executed, estimates, fail: false, delay: 0, checkError: '', pauseNextState: false, releaseState: null,
     positions: [{ id: '123', symbol: 'XAUUSDm', side: 'buy', entryPrice: 3800, quantity: .02, stopLoss: 3790, takeProfit: 3820, profit: 10 }],
     orders: [{ id: '321', symbol: 'XAUUSDm', side: 'buy', type: 'limit', price: 3750, quantity: .01, stopLoss: 3740, takeProfit: 3770 }] };
   page.on('pageerror', error => errors.push(error.message));
@@ -16,6 +16,13 @@ exports.tradingPage = async function tradingPage(browser, options = {}) {
       const quotes = Object.fromEntries((url.searchParams.get('symbols') || 'XAUUSDm').split(',').map(symbol => [symbol,
         { bid: 3800, ask: 3800.01, min: .01, max: 200, step: .01, tickSize: .001, digits: 3, orderMode: 127, expirationMode: 15 }]));
       result = { account, positions: fixture.positions, orders: fixture.orders, quotes };
+      if (fixture.pauseNextState) {
+        fixture.pauseNextState = false;
+        const snapshot = JSON.stringify(result);
+        await new Promise(resolve => { fixture.releaseState = resolve; });
+        fixture.releaseState = null;
+        await route.fulfill({ contentType: 'application/json', body: snapshot }); return;
+      }
     } else if (url.pathname.endsWith('/estimate')) {
       const command = route.request().postDataJSON(); estimates.push(command);
       const i = command.intent, entry = i.type === 'market' ? i.side === 'buy' ? 3800.01 : 3800 : i.price;
@@ -29,6 +36,7 @@ exports.tradingPage = async function tradingPage(browser, options = {}) {
         margin: quantity * 100, marginFree: account.marginFree, leverage: account.leverage, tickValue: quantity * .1, notional: quantity * 100 * entry };
     } else if (url.pathname.endsWith('/check')) {
       const command = route.request().postDataJSON(); checked.push(command);
+      if (fixture.checkError) { await route.fulfill({ status: 400, json: { error: fixture.checkError } }); return; }
       result = { ok: true, account, request: command };
     } else if (url.pathname.endsWith('/execute')) {
       const command = route.request().postDataJSON(); executed.push(command);
