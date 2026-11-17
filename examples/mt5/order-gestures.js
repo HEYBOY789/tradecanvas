@@ -9,7 +9,7 @@ export function tradeGestures(widget, options) {
   const layer = document.createElement('div'); layer.className = options.draft ? 'mt5-projection' : 'mt5-projection mt5-live-stops'; host.append(layer);
   const controls = new Map();
   const ghosts = new Map();
-  let frame, timer, stopped = false, drag = null, inset = 0, lastAccount;
+  let frame, timer, stopped = false, drag = null, inset = 0, lastAccount, middleClick = false;
   const names = { price: 'Entry', stopPrice: 'Stop', stopLoss: 'SL', takeProfit: 'TP' };
   const toolActive = () => Boolean(chart.getDrawingTool() || chart.isEraserMode() || chart.isZoomAreaMode());
   const reserved = event => event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || toolActive();
@@ -20,22 +20,38 @@ export function tradeGestures(widget, options) {
       price: roundPrice(yToPrice(Math.max(rect.y, Math.min(rect.y + rect.height, y)), viewport), quote) };
   }
   function begin(event, target, field) {
-    if (event.button !== 0 || reserved(event)) return;
+    if ((event.button !== 0 && !(event.button === 1 && field === 'price')) || reserved(event)) return;
     event.preventDefault(); event.stopImmediatePropagation();
     if (options.disabled?.() || drag) return;
+    middleClick = event.button === 1;
     options.activate?.();
     // Preventing the native pan also prevents its default focus change. The
     // form must stop treating an old input as actively typed while dragging.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     const current = options.read();
     drag = { target: { ...target, row: { ...target.row } }, field, ghost: ghosts.has(`${target.key}:${field}`),
-      bracket: field === 'price' && options.bracketMode?.(), pointer: event.pointerId,
+      bracket: field === 'price' && (event.button === 1 || options.bracketMode?.()), pointer: event.pointerId,
       account: current.accountId, quote: current.quote, entry: target.row.price ?? target.row.entryPrice,
       price: ghosts.get(`${target.key}:${field}`) ?? target.row[field] ?? target.row.entryPrice, startY: event.clientY, moved: false, finished: false };
     host.setPointerCapture(event.pointerId);
   }
+  function entryLabel(point, targets) {
+    const manager = chart.tradingManager;
+    const contains = rect => point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
+    const handle = manager.tagBoxes?.find(contains);
+    if (handle) return handle.grab.kind === 'order'
+      ? targets.find(target => target.kind === 'order' && target.row.id === handle.grab.orderId) : null;
+    const rect = manager.tagRects().find(contains);
+    if (!rect) return null;
+    // Filled Entry labels have no native drag handle. Their close/reverse
+    // button identifies the position even when several entries share a price.
+    const button = manager.buttons?.find(button => ['closePosition', 'reversePosition'].includes(button.action.type) &&
+      button.x >= rect.x && button.x + button.size <= rect.x + rect.width && button.y >= rect.y && button.y + button.size <= rect.y + rect.height);
+    return button && targets.find(target => target.kind === 'position' && target.row.id === button.action.positionId);
+  }
   function down(event) {
-    if (event.button !== 0 || reserved(event) || !host.contains(event.target)) return;
+    if (event.button === 1) middleClick = false;
+    if ((event.button !== 0 && event.button !== 1) || reserved(event) || !host.contains(event.target)) return;
     const owned = [...controls.values()].find(value => value.tag === event.target || value.tag.contains(event.target));
     const current = options.read(); if (!current.quote) return;
     const point = geometry(event, current.quote);
@@ -45,8 +61,12 @@ export function tradeGestures(widget, options) {
     if (event.target.closest('button,input,select,textarea')) return;
     if (!point.inside) return;
     if (!options.draft && current.blockedPrices?.some(price => price > 0 && Math.abs(priceToY(price, point.viewport) - point.y) <= 7)) return;
+    if (event.button === 1 && !options.draft) {
+      const target = entryLabel(point, current.targets);
+      if (target) { begin(event, target, 'price'); return; }
+    }
     const hit = current.targets.flatMap(target => {
-      const fields = [...(target.canMoveEntry || options.bracketMode?.() ? ['price'] : []),
+      const fields = [...(target.canMoveEntry || event.button === 1 || options.bracketMode?.() ? ['price'] : []),
         ...(target.row.type === 'stopLimit' ? ['stopPrice'] : []), 'stopLoss', 'takeProfit'];
       return fields.flatMap(field => {
         const price = ghosts.get(`${target.key}:${field}`) ?? (field === 'price' ? target.row.price ?? target.row.entryPrice : target.row[field]);
@@ -54,6 +74,12 @@ export function tradeGestures(widget, options) {
       });
     }).filter(item => item.distance <= 7).sort((a, b) => a.distance - b.distance)[0];
     if (hit) begin(event, hit.target, hit.field);
+  }
+  function middleDefault(event) {
+    if (event.button !== 1 || !middleClick) return;
+    // Stop browser autoscroll/auxiliary clicks only for an owned order drag.
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (event.type === 'auxclick') middleClick = false;
   }
   function move(event) {
     if (!drag || drag.finished || drag.pointer !== event.pointerId) return;
@@ -110,6 +136,7 @@ export function tradeGestures(widget, options) {
     const line = document.createElement('div'); line.className = `mt5-projection-line mt5-projection-${field}`;
     const tag = document.createElement('button'); tag.type = 'button'; tag.className = 'mt5-projection-tag';
     tag.setAttribute('aria-label', target.kind === 'draft' ? `Kéo ${names[field]} lệnh nháp` : `Kéo ${names[field]} lệnh ${target.row.id}`);
+    if (field === 'price') tag.title = 'Giữ nút giữa chuột rồi kéo để đặt/đổi SL hoặc TP. Chuột trái kéo dời giá khi tắt chế độ SL/TP.';
     const value = { line, tag, target, field };
     tag.addEventListener('pointerdown', event => begin(event, value.target, field)); line.append(tag);
     if (field === 'price') {
@@ -198,6 +225,7 @@ export function tradeGestures(widget, options) {
   // gives that temporary editor priority over the widget's native drag handler.
   const downHost = window;
   downHost.addEventListener('pointerdown', down, true);
+  window.addEventListener('mousedown', middleDefault, true); window.addEventListener('auxclick', middleDefault, true);
   window.addEventListener('pointermove', move, true); window.addEventListener('pointerup', up, true);
   window.addEventListener('pointercancel', cancel, true); window.addEventListener('keydown', keyboard, true);
   render();
@@ -205,6 +233,7 @@ export function tradeGestures(widget, options) {
     stopped = true; cancel(); cancelAnimationFrame(frame); clearTimeout(timer); layer.remove();
     if (options.draft) { chart.tradingManager.setTagInset(0); chart.requestRender(); }
     downHost.removeEventListener('pointerdown', down, true); window.removeEventListener('pointermove', move, true);
+    window.removeEventListener('mousedown', middleDefault, true); window.removeEventListener('auxclick', middleDefault, true);
     window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', cancel, true); window.removeEventListener('keydown', keyboard, true);
   } };
 }

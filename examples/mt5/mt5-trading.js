@@ -383,7 +383,7 @@ export function createMt5Trading(getActiveWidget) {
     const bracketButton = button('SL/TP', () => setBracketMode(!mode.active));
     bracketButton.className = 'mt5-bracket-mode';
     bracketButton.setAttribute('aria-label', 'Kéo SL/TP từ Entry');
-    bracketButton.title = 'Bật: kéo từ Entry để đặt/đổi SL hoặc TP. Tắt: kéo Entry dời cả bộ. Esc để tắt.';
+    bracketButton.title = 'Giữ nút giữa chuột và kéo từ Entry để đặt/đổi SL hoặc TP bất cứ lúc nào. Bật nút này để kéo bằng chuột trái. Tắt: chuột trái dời cả bộ. Esc để tắt.';
     const toolActive = () => Boolean(chart.getDrawingTool() || chart.isEraserMode() || chart.isZoomAreaMode());
     function setBracketMode(value) { mode.active = value && !toolActive(); bracketButton.setAttribute('aria-pressed', String(mode.active)); }
     function resetBracketMode() { setBracketMode(false); bracketButton.disabled = toolActive(); }

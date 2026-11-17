@@ -110,7 +110,7 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
     const row = node('div'); const value = node('strong'); row.append(node('span', label), value); receipt.append(row); amounts.set(id, value);
   }
   const hint = node('p', null, { class: 'order-ticket-muted' });
-  hint.textContent = 'Bật SL/TP trên chart rồi kéo từ Entry để đặt/đổi mức. Tắt nút để kéo Entry dời cả bộ và giữ R:R. Kéo trực tiếp SL/TP để đổi riêng mức đó. Ước tính chưa gồm phí, swap và trượt giá.';
+  hint.textContent = 'Giữ nút giữa chuột rồi kéo từ Entry để đặt/đổi SL hoặc TP, không cần bật trước. Hoặc bật SL/TP trên chart để kéo bằng chuột trái. Tắt nút: chuột trái dời Entry cùng SL/TP và giữ R:R. Kéo trực tiếp SL/TP để đổi riêng mức đó. Ước tính chưa gồm phí, swap và trượt giá.';
   const issue = node('p', null, { class: 'order-ticket-error', role: 'status' });
   const permission = node('p', null, { class: 'order-ticket-warning' });
   const submitButton = node('button', null, { type: 'submit', class: 'order-ticket-submit' });
