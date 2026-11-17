@@ -109,23 +109,37 @@ test('expiry applies to filled positions and drafts, uses chart timezone and can
   } finally { await browser.close(); }
 });
 
-test('Bid/Ask settings draw independently, cancel rolls back and named layouts retain both', async () => {
+test('Ask extends the default Bid line, cancel rolls back and named layouts retain the choice', async () => {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
     const { page, fixture } = await tradingPage(browser);
     await page.evaluate(() => testGrid.getWidget(0).chartSettings.openSettings('symbol'));
     let settings = page.locator('.tcw-set'); await settings.getByLabel('Đường giá Ask', { exact: true }).check();
-    await settings.getByLabel('Đường giá Bid', { exact: true }).check();
+    assert.equal(await settings.getByLabel('Đường giá Bid', { exact: true }).count(), 0);
+    const price = settings.getByRole('group', { name: 'Giá cuối', exact: true });
+    for (const [label, color] of [['Màu Bid', '#123456'], ['Màu Ask', '#abcdef']]) {
+      await price.getByLabel(label, { exact: true }).evaluate((input, value) => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); }, color);
+    }
+    await price.getByLabel('Kiểu nét', { exact: true }).selectOption('dashed');
+    await price.getByLabel('Độ dày nét', { exact: true }).selectOption('3');
     await page.waitForFunction(() => testGrid.getWidget(0).getChart().getBidAsk()?.ask === 3800.01);
     await settings.locator('[data-act=ok]').click();
     const saved = await page.evaluate(() => testGrid.getLayoutSession().saveAs('Bid Ask settings'));
     await page.evaluate(() => testGrid.getWidget(0).chartSettings.openSettings('symbol'));
     settings = page.locator('.tcw-set'); await settings.getByLabel('Đường giá Ask', { exact: true }).uncheck();
+    await settings.getByRole('group', { name: 'Giá cuối', exact: true }).getByRole('switch', { name: 'Đường giá', exact: true }).uncheck();
     await settings.locator('[data-act=cancel]').click();
     await page.waitForFunction(() => testGrid.getWidget(0).getChart().getBidAsk()?.ask === 3800.01);
-    await page.evaluate(async id => { testGrid.getWidget(0).setTradePreferences({ bid: false, ask: false }); await testGrid.getLayoutSession().open(id); }, saved.id);
+    await page.evaluate(async id => { testGrid.getWidget(0).setTradePreferences({ ask: false }); await testGrid.getLayoutSession().open(id); }, saved.id);
     const quotes = await page.evaluate(() => testGrid.getWidget(0).getChart().getBidAsk());
-    assert.deepEqual(quotes, { bid: 3800, ask: 3800.01 });
+    assert.deepEqual(quotes, { ask: 3800.01 });
+    assert.equal(await page.evaluate(() => testGrid.getWidget(0).getChart().currentPriceLine.getPrice()), 3800);
+    await page.reload(); await page.waitForFunction(() => window.testReady);
+    await page.evaluate(async () => { await testReady.ready(); testGrid.getLayoutSession().setAutoSave(false); });
+    await page.waitForFunction(() => testGrid.getWidget(0).getChart().getBidAsk()?.ask === 3800.01);
+    const look = await page.evaluate(() => testGrid.getWidget(0).getChart().getStyle().lastPrice);
+    assert.equal(look.visible, true); assert.equal(look.up, '#123456'); assert.equal(look.down, '#abcdef');
+    assert.equal(look.style, 'dashed'); assert.equal(look.width, 3);
     assert.equal(fixture.executed.length, 0); assert.deepEqual(fixture.errors, []);
   } finally { await browser.close(); }
 });

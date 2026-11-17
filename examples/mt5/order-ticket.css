@@ -117,6 +117,7 @@
 .mt5-expiry-line > button { position: absolute; bottom: 8px; right: 2px; width: max-content; max-width: 280px; padding: 4px 6px; background: var(--tcw-bg, #131722); color: #ff9800; border: 1px solid #ff9800; border-radius: 3px; pointer-events: auto; cursor: ew-resize; font: 11px 'Segoe UI', sans-serif; touch-action: none; }
 .mt5-expiry-line[data-offscreen=true] { border-left-style: dotted; }
 .mt5-view-settings input { margin-left: auto; }
+.mt5-ask-setting[hidden] { display: none !important; }
 .mt5-expiry-fields[hidden] { display: none !important; }
 .mt5-projection[hidden], .mt5-projection-line[hidden], .order-ticket-content [hidden] { display: none !important; }
 @media (max-width: 760px) {
