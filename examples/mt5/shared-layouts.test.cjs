@@ -10,6 +10,7 @@ test('independent LAN clients share layouts, refresh visible lists and preserve 
     async function client(seed) {
       const context = await browser.newContext({ viewport: { width: 1740, height: 1050 } });
       const page = await context.newPage();
+      await require('./market-fixture.cjs').mockMarket(page);
       page.setDefaultTimeout(10000);
       page.on('pageerror', error => errors.push(error.message));
       if (seed) await page.addInitScript(seed => {

@@ -169,13 +169,14 @@ class TradingTests(unittest.TestCase):
     def test_pending_orders_keep_time_policy_and_stops(self):
         for side in ['buy', 'sell']:
             for kind in ['limit', 'stop']:
+                price = 95 if (side == 'buy') == (kind == 'limit') else 105
                 request = self.service.check(self.command(intent=dict(side=side, type=kind, quantity=.01,
-                                         price=95, stopLoss=90, takeProfit=110, timeInForce='day')))['request']
+                                         price=price, stopLoss=90 if side == 'buy' else 110, takeProfit=110 if side == 'buy' else 90, timeInForce='day')))['request']
                 self.assertEqual(request['action'], 5)
                 self.assertEqual(request['type_filling'], 2)
                 self.assertEqual(request['type_time'], 1)
-                self.assertEqual(request['sl'], 90)
-                self.assertEqual(request['tp'], 110)
+                self.assertEqual(request['sl'], 90 if side == 'buy' else 110)
+                self.assertEqual(request['tp'], 110 if side == 'buy' else 90)
 
     def test_modify_cancel_sltp_and_hedged_close_ticket(self):
         request = self.service.check(self.command('modifyOrder', dict(orderId='321', newPrice=96, previousPrice=95)))['request']

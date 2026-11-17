@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PurePosixPath
-from threading import Lock
+from threading import Lock, Thread, Event
 from urllib.parse import parse_qs, urlsplit
 
 from cvd_volume import RecentTicks, TARGETS, read_cvd
@@ -49,7 +49,7 @@ def browser_assets():
         "worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     )
     assets = {'/': ('text/html; charset=utf-8', index)}
-    for name in ('app.js', 'session-levels.js', 'session-settings.js', 'cvd.js', 'pane-scale.js', 'pane-crosshair.js', 'layout-persistence.js', 'layout-transfer.js', 'mt5-trading.js', 'shared-layouts.js', 'order-model.js', 'order-projection.js', 'order-gestures.js', 'order-ticket.js'):
+    for name in ('app.js', 'session-levels.js', 'session-settings.js', 'cvd.js', 'pane-scale.js', 'pane-crosshair.js', 'layout-persistence.js', 'layout-transfer.js', 'mt5-trading.js', 'shared-layouts.js', 'order-model.js', 'order-projection.js', 'order-gestures.js', 'order-ticket.js', 'order-rules.js', 'order-time.js', 'chart-preferences.js', 'expiry-chart.js'):
         assets[f'/{name}'] = (MODULE, (ROOT / name).read_bytes())
     assets['/order-ticket.css'] = ('text/css; charset=utf-8', (ROOT / 'order-ticket.css').read_bytes())
     for name in LIBRARIES:
@@ -378,6 +378,12 @@ def main():
         server.feed = MarketData()
         server.layouts = LayoutStore(args.layout_dir)
         server.trading = Mt5Trading(mt5, server.feed, ROOT)
+        stopping = Event()
+        def expire_trades():
+            while not stopping.wait(1):
+                server.trading.expiry.process()
+        expiry_thread = Thread(target=expire_trades, daemon=True)
+        expiry_thread.start()
         server.local_addresses = {'127.0.0.1', '::1'} | {
             address[4][0] for address in socket.getaddrinfo(socket.gethostname(), None)
         }
@@ -393,6 +399,8 @@ def main():
         except KeyboardInterrupt:
             pass
         finally:
+            stopping.set()
+            expiry_thread.join(timeout=5)
             with server.feed.lock:
                 mt5.shutdown()
 

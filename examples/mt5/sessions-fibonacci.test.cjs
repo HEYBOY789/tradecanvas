@@ -6,7 +6,9 @@ test('Fibonacci uses only the selected levels and supports CVD and reverse direc
   const { DEFAULTS } = await import('./session-settings.js');
   const settings = structuredClone(DEFAULTS);
   const range = { start: 1, end: 5, low: 100, high: 200 };
-  assert.deepEqual(fibonacciLines(range, 'PD', settings).map(line => line.price), [123.6, 138.2, 150, 161.8, 178.6]);
+  assert.deepEqual(fibonacciLines(range, 'PD', settings).map(line => line.price), [100, 123.6, 138.2, 150, 161.8, 178.6, 200]);
+  const endpoints = fibonacciLines(range, 'PA', settings, { ...settings.fibonacci, direction: 'High → Low' }, { 0: 'PAL', 100: 'PAH' });
+  assert.equal(endpoints[0].price, range.low); assert.equal(endpoints.at(-1).price, range.high);
   settings.fibonacci.levels = { p382: true, p500: true };
   settings.fibonacci.colors.p382 = '#123456';
   assert.deepEqual(fibonacciLines(range, 'PD', settings).map(line => [line.name, line.price, line.color]),

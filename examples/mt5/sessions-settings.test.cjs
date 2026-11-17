@@ -8,6 +8,7 @@ test('Sessions settings open from the native indicator controls and keep saved v
   });
   try {
     const page = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+    await require('./market-fixture.cjs').mockMarket(page);
     page.setDefaultTimeout(5000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -43,7 +44,8 @@ test('Sessions settings open from the native indicator controls and keep saved v
     assert.equal(saved.zone, 'GMT+2');
     assert.equal(saved.sessions.asia.start, '21:30');
     assert.equal(saved.sessions.asia.showOpen, true);
-    assert.equal(saved.periods.monday.mid, true);
+    assert.equal(saved.periods.monday.fibonacciLevels.p500, true);
+    assert.equal(saved.periods.monday.mid, undefined);
     assert.equal(saved.periods.monday.width, 3);
     assert.equal(saved.custom[0].label, 'Saved level');
 

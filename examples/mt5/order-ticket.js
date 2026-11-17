@@ -1,4 +1,6 @@
 import { ORDER_TYPES, orderIntent, priceFromUnit, roundPrice, translatedOrder, valueInUnit } from './order-model.js';
+import { tradeIssue } from './order-rules.js';
+import { expiryFields, wallTime, parseWallTime } from './order-time.js';
 
 const format = (value, digits = 2) => value == null ? '—' : Number(value).toLocaleString('vi-VN', { maximumFractionDigits: digits });
 function node(tag, text, attributes = {}) {
@@ -87,9 +89,19 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
   const entryGroup = priceControl('price', 'Giá Limit');
   const exits = node('section', null, { class: 'order-ticket-exits' });
   exits.append(node('h3', 'Thoát lệnh'), priceControl('takeProfit', 'Take Profit', true), priceControl('stopLoss', 'Stop Loss', true));
-  const tif = select('Thời hạn lệnh', 'timeInForce', [['gtc', 'Đến khi hủy · GTC'], ['day', 'Trong ngày · Day']]);
-  tif.addEventListener('change', () => change('timeInForce', tif.value));
+  const tif = select('Thời hạn lệnh', 'timeInForce', [['gtc', 'Không thời hạn · GTC'], ['day', 'Cuối ngày (múi giờ chart)'], ['specified', 'Chọn ngày giờ']]);
+  const expiry = expiryFields({ zone: () => widget?.getSettings().timezone || 'UTC',
+    clock: value => { if (value) widget?.setTradePreferences({ clock: value }); return widget?.getTradePreferences?.().clock || '24h'; },
+    change: value => change('expiresAt', value) });
+  tif.addEventListener('change', () => {
+    change('timeInForce', tif.value);
+    const zone = widget.getSettings().timezone;
+    const day = wallTime(Date.now() + 86400000, zone).date;
+    change('expiresAt', tif.value === 'gtc' ? null : tif.value === 'day' ? parseWallTime(day, '00:00', 'AM', zone) : Date.now() + 3600000);
+  });
   const tifGroup = node('label', 'Thời hạn lệnh', { class: 'order-ticket-tif' }); tifGroup.append(tif);
+  const expiryNote = node('small', 'Đóng vị thế / hủy lệnh khi tới hạn. Máy host và MT5 phải đang chạy; kết quả khớp theo giá broker tại thời điểm gửi.');
+  tifGroup.append(expiry.root, expiryNote);
   const receipt = node('section', null, { class: 'order-ticket-receipt' });
   receipt.append(node('h3', 'Thông tin lệnh'));
   const amounts = new Map();
@@ -143,11 +155,9 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
   }
   function validate() {
     if (!(draft.quantity > 0)) throw new Error('Nhập khối lượng hoặc mức rủi ro lớn hơn 0.');
-    const entry = entryPrice(), buySide = draft.side === 'buy';
-    if (!(entry > 0)) throw new Error('Giá vào phải lớn hơn 0.');
-    if (draft.stopLoss != null && (buySide ? draft.stopLoss >= entry : draft.stopLoss <= entry)) throw new Error('Stop Loss phải nằm ở phía lỗ của Entry.');
-    if (draft.takeProfit != null && (buySide ? draft.takeProfit <= entry : draft.takeProfit >= entry)) throw new Error('Take Profit phải nằm ở phía có lời của Entry.');
-    if (draft.type === 'stopLimit' && (!(draft.stopPrice > 0) || (buySide ? draft.price > draft.stopPrice : draft.price < draft.stopPrice))) throw new Error('Giá Limit của Buy Stop Limit phải ≤ giá Stop; Sell Stop Limit phải ≥ giá Stop.');
+    if (draft.timeInForce !== 'gtc' && !draft.expiresAt) throw new Error('Chọn ngày giờ hết hạn.');
+    draft.nativeTimeInForce = draft.expiresAt ? (currentQuote().expirationMode & 4 ? 'specified' : 'gtc') : draft.timeInForce;
+    const issue = tradeIssue(draft, currentQuote()); if (issue) throw new Error(issue);
   }
   function schedule(keepEstimate = false) {
     clearTimeout(estimateTimer); const version = ++sequence;
@@ -173,8 +183,8 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
     root.dataset.theme = widget?.root?.dataset.tcwTheme || 'dark';
     title.textContent = draft.symbol;
     accountLine.textContent = `${a.demo ? 'DEMO' : 'THẬT'} · ${a.login} · ${a.server}`;
-    sell.replaceChildren(node('span', 'Bán / Sell'), node('strong', format(q.bid, q.digits)));
-    buy.replaceChildren(node('span', 'Mua / Buy'), node('strong', format(q.ask, q.digits)));
+    sell.replaceChildren(node('strong', format(q.bid, q.digits)), node('span', 'Bán / Sell'));
+    buy.replaceChildren(node('strong', format(q.ask, q.digits)), node('span', 'Mua / Buy'));
     sell.setAttribute('aria-pressed', String(draft.side === 'sell')); buy.setAttribute('aria-pressed', String(draft.side === 'buy'));
     spread.textContent = `${format((q.ask - q.bid) / q.tickSize, 1)} ticks`;
     for (const [id, tab] of types) {
@@ -202,8 +212,9 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
       control.converted.textContent = draft[field] == null ? 'Chưa đặt' : control.units.value === 'price'
         ? `${format(Math.abs(draft[field] - entry) / q.tickSize, 1)} ticks` : format(draft[field], q.digits);
     }
-    tifGroup.hidden = draft.type === 'market'; tif.value = draft.timeInForce;
-    for (const option of tif.options) option.disabled = q.expirationMode != null && !(q.expirationMode & (option.value === 'gtc' ? 1 : 2));
+    tifGroup.hidden = false; tif.value = draft.timeInForce;
+    expiry.root.hidden = draft.timeInForce === 'gtc'; expiryNote.hidden = draft.timeInForce === 'gtc';
+    if (draft.expiresAt) expiry.render(draft.expiresAt);
     for (const [id, value] of amounts) value.textContent = id === 'ratio' ? estimate?.ratio == null ? '—' : `${format(estimate.ratio)} : 1`
       : id === 'leverage' ? `1:${format(a.leverage, 0)}` : estimate?.[id] == null ? '—' : `${format(estimate[id], id === 'tickValue' ? 6 : 2)} ${a.currency}`;
     clickInput.checked = oneClick();
@@ -216,6 +227,7 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
   }
   async function submit() {
     if (!draft || sending || !estimate || problem) return;
+    try { validate(); } catch (error) { problem = error.message; render(); return; }
     const intent = orderIntent(draft, estimate);
     sending = true; render();
     try {

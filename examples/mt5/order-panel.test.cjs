@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { chromium } = require('playwright');
-const { tradingPage } = require('./trading-fixture.cjs');
+const { tradingPage, setOneClick } = require('./trading-fixture.cjs');
 
 async function view(page, min, max) {
   await page.evaluate(async ([min, max]) => {
@@ -69,7 +69,7 @@ test('SL/TP mode creates or replaces exits from Entry, normal Entry drag preserv
     assert.ok(fixture.checked.at(-1).intent.stopLoss < 3750);
     await page.locator('#mt5-review').getByRole('button', { name: 'Gửi tới MT5' }).click();
     await page.locator('#mt5-review').waitFor({ state: 'detached' });
-    await page.getByLabel('One-click trading trên chart', { exact: true }).check();
+    await setOneClick(page);
     await executed(page, () => liveEntry(-45, true));
     const original = { ...fixture.orders[0] };
     await executed(page, () => liveEntry(-20, false));
@@ -155,7 +155,7 @@ test('right-click chart and dragging pending or open-position stops route real t
     assert.equal(fixture.checked.at(-1).intent.orderId, '321'); assert.ok(fixture.checked.at(-1).intent.stopLoss < 3740);
     await page.locator('#mt5-review').getByRole('button', { name: 'Gửi tới MT5' }).click();
     await page.locator('#mt5-review').waitFor({ state: 'detached' });
-    await page.getByLabel('One-click trading trên chart', { exact: true }).check();
+    await setOneClick(page);
     const line = await page.evaluate(async () => {
       const { priceToY } = await import('/vendor/core/index.js'); const w = testGrid.getWidget(0), chart = w.getChart(), v = chart.viewport.getState(), r = w.chartContainer.getBoundingClientRect();
       return { x: r.left + v.chartRect.x + v.chartRect.width / 2, y: r.top + priceToY(3790, v) };

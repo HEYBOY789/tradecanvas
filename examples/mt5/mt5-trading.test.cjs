@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { chromium } = require('playwright');
-const { tradingPage } = require('./trading-fixture.cjs');
+const { tradingPage, setOneClick } = require('./trading-fixture.cjs');
 
 test('sidebar ticket, review, position actions and uncertain results use only mocked execution', async () => {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
@@ -67,7 +67,7 @@ test('one-click buttons use visible lots, avoid duplicate sends and disarm on an
     assert.equal(fixture.executed.length, 0, 'One-click is off by default');
     await page.getByRole('button', { name: 'Đóng phiếu đặt lệnh' }).click();
     await page.getByLabel('Số lot giao dịch nhanh', { exact: true }).fill('0.02');
-    await page.getByLabel('One-click trading trên chart', { exact: true }).check();
+    await setOneClick(page);
     fixture.delay = 400;
     await page.getByRole('button', { name: 'Bán nhanh MT5', exact: true }).dblclick();
     await page.waitForFunction(() => document.querySelector('[aria-label="Bán nhanh MT5"]').disabled === false);
@@ -76,7 +76,7 @@ test('one-click buttons use visible lots, avoid duplicate sends and disarm on an
     assert.equal(fixture.executed[0].intent.side, 'sell');
     assert.equal(await page.locator('#mt5-review').count(), 0);
     fixture.account.id = 'another-account'; fixture.account.login = 'OTHER-TEST-ACCOUNT';
-    await page.waitForFunction(() => !document.querySelector('[aria-label="One-click trading trên chart"]').checked);
+    await page.waitForFunction(() => document.querySelector('.mt5-quick-trade').dataset.oneClick === 'false');
     await page.getByRole('button', { name: 'Mua nhanh MT5', exact: true }).click();
     await page.locator('#mt5-ticket:not([hidden])').waitFor();
     assert.equal(fixture.executed.length, 1);

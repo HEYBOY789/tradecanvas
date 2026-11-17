@@ -2,6 +2,7 @@
 exports.tradingPage = async function tradingPage(browser, options = {}) {
   const context = await browser.newContext({ viewport: { width: 1740, height: 1050 } });
   const page = await context.newPage(); page.setDefaultTimeout(12000);
+  await require('./market-fixture.cjs').mockMarket(page);
   const errors = [], checked = [], executed = [], estimates = [];
   const account = { id: 'mock-account', login: 'TEST-ONLY', server: 'Mock Broker', demo: true, currency: 'USD',
     balance: 10000, equity: 10010, marginFree: 9000, profit: 10, leverage: 100, allowed: true, reason: '' };
@@ -46,6 +47,10 @@ exports.tradingPage = async function tradingPage(browser, options = {}) {
         if (command.action === 'close') fixture.positions = [];
         if (command.action === 'cancel') fixture.orders = [];
         if (command.action === 'modifyPosition') Object.assign(fixture.positions.find(row => row.id === command.intent.positionId), command.intent);
+        if (command.action === 'setExpiry') {
+          const rows = command.intent.kind === 'position' ? fixture.positions : fixture.orders;
+          Object.assign(rows.find(row => row.id === command.intent.ticket), { expiresAt: command.intent.expiresAt });
+        }
         if (command.action === 'modifyOrder') {
           const row = fixture.orders.find(row => row.id === command.intent.orderId);
           if (row.type === 'stopLimit') { row.stopPrice = command.intent.newPrice; row.price = command.intent.limitPrice ?? row.price; }
@@ -63,7 +68,18 @@ exports.tradingPage = async function tradingPage(browser, options = {}) {
       'installGridLayoutPersistence(grid); window.testGrid = grid; window.testReady = layoutOperations;') });
   });
   await page.goto(options.url || process.env.TRADECANVAS_URL || 'http://127.0.0.1:8773/');
-  await page.waitForFunction(() => window.testReady && testGrid.getWidget(0).getChart().getPositions().length === 1);
+  await page.waitForFunction(() => window.testReady);
   await page.evaluate(async () => { await testReady.ready(); testGrid.getLayoutSession().setAutoSave(false); testGrid.setLayout('1x1'); });
+  await page.waitForFunction(() => testGrid.getWidget(0).getChart().getPositions().length === 1).catch(async error => {
+    throw new Error(`Trading fixture did not initialize: ${JSON.stringify({ errors, state: await page.evaluate(() => ({ ready: !!window.testReady,
+      status: document.querySelector('#mt5-trading-status')?.textContent, positions: window.testGrid?.getWidget(0).getChart().getPositions().length })) })}; ${error.message}`);
+  });
   return { page, context, fixture };
+};
+
+exports.setOneClick = async function setOneClick(page, enabled = true) {
+  await page.evaluate(() => testGrid.getWidget(0).chartSettings.openSettings('trading'));
+  const dialog = page.locator('.tcw-set'); await dialog.waitFor();
+  await dialog.getByLabel('One-click trading', { exact: true }).setChecked(enabled);
+  await dialog.locator('[data-act=ok]').click();
 };

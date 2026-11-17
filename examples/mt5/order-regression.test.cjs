@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { chromium } = require('playwright');
-const { tradingPage } = require('./trading-fixture.cjs');
+const { tradingPage, setOneClick } = require('./trading-fixture.cjs');
 
 async function linePoint(page, price) {
   return page.evaluate(async price => {
@@ -102,7 +102,7 @@ test('SL/TP mode updates both exits of an existing sell position without moving 
     fixture.orders = [];
     Object.assign(fixture.positions[0], { side: 'sell', stopLoss: null, takeProfit: null });
     await page.waitForFunction(() => testGrid.getWidget(0).getChart().getOrders().length === 0 && testGrid.getWidget(0).getChart().getPositions()[0].side === 'sell');
-    await page.getByLabel('One-click trading trên chart', { exact: true }).check();
+    await setOneClick(page);
     const mode = page.getByRole('button', { name: 'Kéo SL/TP từ Entry', exact: true }); await mode.click();
     async function acceptedDrag(price, dy) {
       const point = await linePoint(page, price);
@@ -128,7 +128,7 @@ test('a polling snapshot started before an accepted stop edit cannot restore its
     const { page, fixture } = await tradingPage(browser);
     fixture.orders = [];
     await page.waitForFunction(() => testGrid.getWidget(0).getChart().getOrders().length === 0);
-    await page.getByLabel('One-click trading trên chart', { exact: true }).check();
+    await setOneClick(page);
     fixture.pauseNextState = true;
     const limit = Date.now() + 3000;
     while (!fixture.releaseState && Date.now() < limit) await new Promise(resolve => setTimeout(resolve, 10));

@@ -9,6 +9,7 @@ test('Sessions has its own pane, merges with CVD and survives layout reload', as
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
     const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+    await require('./market-fixture.cjs').mockMarket(page);
     page.setDefaultTimeout(8000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));

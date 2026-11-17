@@ -6,6 +6,7 @@ test('named layouts restore chart and Sessions timezones, including after reload
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
     const page = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+    await require('./market-fixture.cjs').mockMarket(page);
     page.setDefaultTimeout(5000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));

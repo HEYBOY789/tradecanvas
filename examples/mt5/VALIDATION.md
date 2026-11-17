@@ -1,5 +1,16 @@
 # MT5 workspace validation — 2026-11-17
 
+## Order controls update
+
+- Added account-bound, durable trade deadlines to new trades and existing orders/positions. Tests cover restart persistence, native pending expiration, following a filled pending order, disabling Algo Trading, changed accounts, increased volume and an uncertain send without retries.
+- Added chart-zone date/time entry with explicit 12/24-hour format and DST validation; a draggable vertical marker edits the same UTC timestamp. Browser checks verify an AM/PM time in Asia/Ho_Chi_Minh maps to the intended UTC instant.
+- Moved One-click to trading settings, placed captions below Bid/Ask prices, added provisional TP/SL switches, and retained native close/cancel/remove-stop actions. Preview toggles do not send or set a broker/draft level; release commits it.
+- Added immediate pending-entry and exit guards in the form, gesture projection and backend. Draft crossings can change side/type; placed orders retain their MT5 side/type and filled positions cannot reverse through a drag. The real closing quote, not historical entry, constrains position SL/TP.
+- Added independent Bid/Ask display under Symbol/Last price, layout persistence and Cancel rollback. Existing settings dialogs render in the widget portal, so the host extension observes that portal.
+- Added Fibonacci 0/100 endpoint labels/colors, period-line outlines, and migration of the old midpoint control to Fibo 50%.
+
+Validation: **30 Python tests, 12 unit tests, 17 mocked trading browser tests and 11 UI compatibility cases**; the visual case checks 18 width/theme/look combinations. UI fixtures supply bars/quotes and intercept all trading mutations. No real broker order is sent by tests. A normal-mode crosshair is used for the exact cursor-price grid assertion so a fixture candle within magnet distance does not change the price under test; a separate case still covers magnet mode. Fixture startup waits for shared layout restoration before inspecting execution state.
+
 ## Upstream and packages
 
 - Merged `bonguynvan/tradecanvas` main through `e2e047efbc9282410fc14dd837504ece616e8f9b`, with no merge conflicts. Fetched upstream again after the merge and verified it is an ancestor of the workspace branch.

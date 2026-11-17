@@ -10,6 +10,7 @@ test('layout files round-trip the grid, parked cells, drawings, timezones and in
       const context = await browser.newContext({ viewport: { width: 1740, height: 1050 }, acceptDownloads: true });
       contexts.push(context);
       const page = await context.newPage();
+      await require('./market-fixture.cjs').mockMarket(page);
       page.setDefaultTimeout(10000);
       await page.route('**/app.js', async route => {
         const response = await route.fetch();

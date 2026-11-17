@@ -31,10 +31,10 @@ export const SESSIONS = [
 ];
 
 export const FIBONACCI_LEVELS = [
-  ['p236', 23.6], ['p382', 38.2], ['p500', 50], ['p618', 61.8], ['p786', 78.6],
+  ['p000', 0], ['p236', 23.6], ['p382', 38.2], ['p500', 50], ['p618', 61.8], ['p786', 78.6], ['p100', 100],
 ];
 export const PREVIOUS_PERIODS = ['previousDay', 'previousWeek', 'previousMonth'];
-const FIBONACCI_COLORS = { p236: '#f23645', p382: '#ff9800', p500: '#089981', p618: '#0097a7', p786: '#5f63df' };
+const FIBONACCI_COLORS = { p000: RED, p236: '#f23645', p382: '#ff9800', p500: '#089981', p618: '#0097a7', p786: '#5f63df', p100: GREEN };
 
 const customTimes = [['00:00', '23:45'], ['00:15', '23:45'], ['12:00', '14:00']];
 
@@ -47,9 +47,9 @@ export const DEFAULTS = {
     direction: 'Low → High', width: 1, style: 'solid', label: true, history: false, labelOutlineColor: '#0c1016',
   },
   periods: Object.fromEntries(PERIODS.map(([id, , , , enabled, open]) => [id, {
-    enabled, label: enabled, extend: false, width: 1, style: 'solid', labelOutlineColor: '#0c1016',
+    enabled, label: enabled, extend: false, width: 1, style: 'solid', labelOutlineColor: '#0c1016', lineBorderColor: '#0c1016', lineBorderWidth: 0,
     ...(open ? { openColor: BLUE } : {
-      mid: false, offset: 0, highColor: GREEN, lowColor: RED, midColor: GREEN,
+      offset: 0, highColor: GREEN, lowColor: RED,
       fibonacci: PREVIOUS_PERIODS.includes(id),
       fibonacciLevels: Object.fromEntries(FIBONACCI_LEVELS.map(([level]) => [level, true])),
       fibonacciColors: { ...FIBONACCI_COLORS }, fibonacciDirection: 'Low → High',
@@ -75,7 +75,8 @@ function migratePeriodFibonacci(snapshot) {
       ...options,
       labelOutlineColor: options.labelOutlineColor ?? snapshot.fibonacci?.labelOutlineColor,
       ...(!open ? {
-        fibonacciLevels: options.fibonacciLevels ?? snapshot.fibonacci?.levels,
+        fibonacci: options.mid === true ? true : options.fibonacci,
+        fibonacciLevels: options.mid === true ? { ...(options.fibonacciLevels ?? snapshot.fibonacci?.levels), p500: true } : options.fibonacciLevels ?? snapshot.fibonacci?.levels,
         fibonacciColors: options.fibonacciColors ?? snapshot.fibonacci?.colors,
         fibonacciDirection: options.fibonacciDirection ?? snapshot.fibonacci?.direction,
       } : {}),
@@ -234,13 +235,14 @@ export function createSessionSettings(validateZone) {
     const path = ['periods', id];
     checks(controls, path, [['enabled', 'Hiện mức'], ['extend', 'Kéo dài sang phải'], ['label', 'Hiện nhãn']]);
     field(controls, [...path, 'labelOutlineColor'], 'Màu viền chữ', 'color');
+    field(controls, [...path, 'lineBorderColor'], 'Màu viền đường', 'color');
+    field(controls, [...path, 'lineBorderWidth'], 'Độ dày viền đường', 'number', { min: 0, max: 4, required: true });
     lineStyle(controls, path);
     if (open) {
       field(controls, [...path, 'openColor'], 'Màu giá mở', 'color');
     } else {
-      checks(controls, path, [['mid', 'Hiện mức 50%']]);
       field(controls, [...path, 'offset'], 'Dời nhãn và đầu nét (số nến)', 'number', { step: 1, required: true });
-      for (const [key, title] of [['highColor', 'Màu High'], ['lowColor', 'Màu Low'], ['midColor', 'Màu 50%']]) {
+      for (const [key, title] of [['highColor', 'Màu High'], ['lowColor', 'Màu Low']]) {
         field(controls, [...path, key], title, 'color');
       }
       const fibonacci = group(controls, 'Fibonacci');

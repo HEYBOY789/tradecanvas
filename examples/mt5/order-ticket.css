@@ -97,11 +97,29 @@
 .mt5-projection-stopLoss { border-color: #f23645; color: #f23645; }
 .mt5-projection-takeProfit { border-color: #089981; color: #089981; }
 .mt5-projection-stopPrice { border-color: #ff9800; color: #ff9800; }
-.mt5-projection-line > button { pointer-events: auto; transform: translateY(-50%); margin: 0; padding: 4px 6px; background: #131722; color: inherit; border: 1px solid currentColor; font: 11px Inter, 'Segoe UI', sans-serif; border-radius: 3px; touch-action: none; }
+.mt5-projection-line > button { pointer-events: auto; transform: translateY(-50%); margin: 0; padding: 4px 6px; background: var(--tcw-bg, #131722); color: inherit; border: 1px solid currentColor; font: 11px Inter, 'Segoe UI', sans-serif; border-radius: 3px; touch-action: none; }
 .mt5-projection-tag { cursor: ns-resize; }
 .mt5-projection-send { cursor: pointer; color: #fff !important; background: #2962ff !important; border-color: #2962ff !important; }
 .mt5-projection-send[data-side="sell"] { background: #f23645 !important; border-color: #f23645 !important; }
 .mt5-projection-cancel { cursor: pointer; }
+.mt5-line-switches { position: absolute; display: flex; gap: 3px; right: 4px; top: -20px; transform: translateY(-100%); z-index: 2; pointer-events: auto; }
+.mt5-line-switches > button { cursor: pointer; background: var(--tcw-bg, #131722); color: var(--tcw-text, #d1d4dc); border: 1px solid var(--tcw-border, #4c5262); border-radius: 3px; padding: 2px 5px; font: 10px 'Segoe UI', sans-serif; }
+.mt5-line-switches > button[aria-checked=true] { border-color: #2962ff; color: #2962ff; }
+.mt5-ghost-stop { opacity: .6; border-top-style: dotted; }
+.mt5-live-entry { border-top-color: transparent; }
+.mt5-live-entry > .mt5-projection-tag { visibility: hidden; }
+.mt5-native-level { border-top-color: transparent; }
+.mt5-native-level > .mt5-projection-tag { opacity: 0; pointer-events: none; }
+.mt5-expiry-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.mt5-expiry-fields label { display: grid; gap: 4px; }
+.mt5-expiry-fields input, .mt5-expiry-fields select { min-width: 0; width: 100%; padding: 7px; color: inherit; background: transparent; border: 1px solid #787b86; border-radius: 4px; font: inherit; }
+.mt5-expiry-fields small, .mt5-expiry-fields p { grid-column: 1 / -1; }
+.mt5-expiry-layer { position: absolute; z-index: 4; pointer-events: none; overflow: hidden; }
+.mt5-expiry-line { position: absolute; top: 0; bottom: 0; border-left: 1px dashed #ff9800; }
+.mt5-expiry-line > button { position: absolute; bottom: 8px; right: 2px; width: max-content; max-width: 280px; padding: 4px 6px; background: var(--tcw-bg, #131722); color: #ff9800; border: 1px solid #ff9800; border-radius: 3px; pointer-events: auto; cursor: ew-resize; font: 11px 'Segoe UI', sans-serif; touch-action: none; }
+.mt5-expiry-line[data-offscreen=true] { border-left-style: dotted; }
+.mt5-view-settings input { margin-left: auto; }
+.mt5-expiry-fields[hidden] { display: none !important; }
 .mt5-projection[hidden], .mt5-projection-line[hidden], .order-ticket-content [hidden] { display: none !important; }
 @media (max-width: 760px) {
   #workspace.has-order-ticket { grid-template-columns: minmax(0, 1fr); }

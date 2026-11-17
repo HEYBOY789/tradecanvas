@@ -188,7 +188,7 @@ async function start() {
       const cell = cells[index];
       cell.widget = widget;
       const { cvd, close, sessions } = cell.connect();
-      const closeTrading = trading.attach(widget, () => grid?.setActive(index));
+      const closeTrading = trading.attach(widget, () => grid?.setActive(index), index);
       cell.message = '';
       sessions.attach(widget);
       cvd.attach(widget);

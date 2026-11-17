@@ -6,6 +6,7 @@ test('Fibonacci checkboxes and all/none buttons stay independent and survive rel
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
     const page = await browser.newPage({ viewport: { width: 1700, height: 1050 } });
+    await require('./market-fixture.cjs').mockMarket(page);
     page.setDefaultTimeout(7000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -29,7 +30,7 @@ test('Fibonacci checkboxes and all/none buttons stay independent and survive rel
       await dialog.waitFor();
       if (!await group.evaluate(element => element.open)) await group.locator('summary').click();
     }
-    const percentages = ['23,6%', '38,2%', '50%', '61,8%', '78,6%'];
+    const percentages = ['0%', '23,6%', '38,2%', '50%', '61,8%', '78,6%', '100%'];
     const selected = async () => {
       const values = [];
       for (const percent of percentages) if (await group.getByLabel(percent, { exact: true }).isChecked()) values.push(percent);

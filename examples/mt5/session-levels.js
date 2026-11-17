@@ -84,14 +84,14 @@ export function sessionRanges(bars, clock, options, history) {
   return ranges;
 }
 
-export function fibonacciLines(range, prefix, settings, options = settings.fibonacci) {
+export function fibonacciLines(range, prefix, settings, options = settings.fibonacci, endpoints = {}) {
   if (!options || !(range.high > range.low)) return [];
   const span = range.high - range.low;
   return FIBONACCI_LEVELS.filter(([id]) => options.levels[id]).map(([id, percent]) => ({
     id: `${prefix}:fibonacci:${id}`, start: range.start ?? range.time, end: range.end,
     endExclusive: range.endExclusive === true,
-    price: options.direction === 'High → Low' ? range.high - span * percent / 100 : range.low + span * percent / 100,
-    color: options.colors[id], name: `${String(percent).replace('.', ',')}%`,
+    price: percent === 0 ? range.low : percent === 100 ? range.high : options.direction === 'High → Low' ? range.high - span * percent / 100 : range.low + span * percent / 100,
+    color: options.colors[id], name: endpoints[percent] || `${String(percent).replace('.', ',')}%`,
     options, fibonacci: true,
   }));
 }
@@ -143,18 +143,16 @@ export function periodLines(periods, settings) {
       continue;
     }
     if (options.enabled) {
-      add('high', bar.high, options.highColor, settings.shortLabels ? `${short}H` : `${long} High`);
-      add('low', bar.low, options.lowColor, settings.shortLabels ? `${short}L` : `${long} Low`);
-      if (options.mid) {
-        add('mid', (bar.high + bar.low) / 2, options.midColor, settings.shortLabels ? `${short}.5` : `${long} 0.5`);
-      }
+      if (!options.fibonacci || !options.fibonacciLevels.p100) add('high', bar.high, options.highColor, settings.shortLabels ? `${short}H` : `${long} High`);
+      if (!options.fibonacci || !options.fibonacciLevels.p000) add('low', bar.low, options.lowColor, settings.shortLabels ? `${short}L` : `${long} Low`);
     }
     if (options.enabled && options.fibonacci) {
       const prefix = settings.shortLabels ? short : long;
       const fibonacci = { ...options, levels: options.fibonacciLevels,
         colors: options.fibonacciColors, direction: options.fibonacciDirection };
-      result.push(...fibonacciLines(bar, prefix, settings, fibonacci).map(line => ({
-        ...line, periodId: id, name: `${prefix} ${line.name}`,
+      const endpoints = { 0: `${short}L`, 100: `${short}H` };
+      result.push(...fibonacciLines(bar, prefix, settings, fibonacci, endpoints).map(line => ({
+        ...line, periodId: id, name: Object.values(endpoints).includes(line.name) ? line.name : `${prefix} ${line.name}`,
       })));
     }
   }
@@ -227,7 +225,9 @@ function drawSessions(ctx, viewport, bars, settings) {
     const options = settings.sessions[id];
     if (options.fibonacci && FIBONACCI_LEVELS.some(([level]) => settings.fibonacci.levels[level])) {
       for (const previous of closedSessionRanges(bars, timeline, timelineClock, options, settings.fibonacci.history)) {
-        fibonacci.push(...fibonacciLines(previous, `${title}:${previous.start}`, settings));
+        const prefix = { asia: 'PA', london: 'PLD', newYork: 'PNY' }[id];
+        fibonacci.push(...fibonacciLines(previous, `${title}:${previous.start}`, settings, settings.fibonacci,
+          { 0: `${prefix}L`, 100: `${prefix}H` }));
       }
     }
     if (!options.enabled) continue;
@@ -285,6 +285,7 @@ function drawPeriods(ctx, viewport, bars, lines) {
     const anchor = timeToX(bars.at(-1).time, viewport) + (options.offset ?? 0) * barStep;
     const end = Math.min(right, options.extend ? right : anchor);
     const y = priceToY(line.price, viewport);
+    if (options.lineBorderWidth > 0) drawLine(ctx, y, start, end, options.lineBorderColor, options.width + options.lineBorderWidth * 2, options.style);
     drawLine(ctx, y, start, end, line.color, options.width, options.style);
     if (end >= start && options.label) drawLabel(ctx, rect, Math.min(anchor + 4, right - 4), y, line.name, line.color, 'right', options.labelOutlineColor);
   }

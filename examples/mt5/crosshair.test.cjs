@@ -8,6 +8,7 @@ test('crosshair shares one vertical line across price and indicator panes', asyn
   });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 930 } });
+    await require('./market-fixture.cjs').mockMarket(page);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/app.js', async route => {
@@ -20,11 +21,16 @@ test('crosshair shares one vertical line across price and indicator panes', asyn
     });
     await page.goto(process.env.TRADECANVAS_URL || 'http://127.0.0.1:8772/');
     await page.waitForFunction(() => window.crosshairTestChart?.getData().length > 0);
-    const points = await page.evaluate(() => {
+    await page.waitForFunction(() => {
+      const chart = window.crosshairTestChart, cvd = chart.getActiveIndicators().find(item => item.id === 'mt5-cvd-candle');
+      return cvd && chart.getIndicatorOutput(cvd.instanceId)?.values.size > 20;
+    });
+    const points = await page.evaluate(async () => {
       const chart = window.crosshairTestChart;
       chart.addIndicator('rsi');
       const data = chart.getData();
       chart.setVisibleRange(data[240].time, data[430].time);
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
       function record(owner, method, key) {
         const render = owner[method];
@@ -78,7 +84,7 @@ test('crosshair shares one vertical line across price and indicator panes', asyn
       const lines = verticals(paths);
       for (const rect of [points.main, ...points.panels]) {
         assert.ok(lines.some(line => line[0].y <= rect.y + 1 && line[1].y >= rect.y + rect.height - 1),
-          `crosshair must reach the bottom of pane at y=${rect.y}`);
+          `crosshair must reach the bottom of pane: ${JSON.stringify({ rect, lines, panels: points.panels })}`);
       }
       assert.ok(Math.max(...lines.map(line => line[0].x)) - Math.min(...lines.map(line => line[0].x)) < 0.01,
         'all panes must draw the same time column');

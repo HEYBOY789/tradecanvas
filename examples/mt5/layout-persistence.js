@@ -34,6 +34,7 @@ export function installChartLayoutPersistence(widget, sessions, sessionLevels, p
   const layouts = widget.layouts;
 
   const preferences = content => {
+    if (content.mt5Preferences) widget.setTradePreferences?.(content.mt5Preferences);
     if (content.settings) {
       widget.setSettings(Object.fromEntries(VIEW_SETTINGS
         .filter(key => typeof content.settings[key] === 'string')
@@ -49,6 +50,7 @@ export function installChartLayoutPersistence(widget, sessions, sessionLevels, p
     const content = capture();
     const settings = widget.getSettings();
     return { ...content,
+      mt5Preferences: widget.getTradePreferences?.(),
       settings: { ...content.settings, ...Object.fromEntries(VIEW_SETTINGS.map(key => [key, settings[key]])) },
       ...(primary ? { sessions: structuredClone(sessions.value) } : {}),
     };
@@ -74,6 +76,7 @@ export function installChartLayoutPersistence(widget, sessions, sessionLevels, p
 
 export function installGridLayoutPersistence(grid) {
   const session = grid.getLayoutSession();
+  document.getElementById('chart')?.addEventListener('mt5PreferencesChange', () => session.changed());
   let pending = Promise.resolve();
   // The grid reader validates each chart but drops viewer settings. Restore
   // those fields through the same per-chart setters as a standalone layout.
@@ -87,7 +90,7 @@ export function installGridLayoutPersistence(grid) {
       for (const key of VIEW_SETTINGS) {
         if (typeof source.settings?.[key] === 'string') settings[key] = source.settings[key];
       }
-      return { ...cell, settings, sessions: source.sessions };
+      return { ...cell, settings, sessions: source.sessions, mt5Preferences: source.mt5Preferences };
     });
     await grid.restoreLayout(content);
     return true;

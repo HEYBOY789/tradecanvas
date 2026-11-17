@@ -23,7 +23,8 @@ export function orderIntent(draft, estimate) {
   const result = { side: draft.side, type: draft.type, quantity: estimate.quantity, price: draft.price };
   if (draft.type === 'stopLimit') result.stopPrice = draft.stopPrice;
   if (draft.type === 'stop') result.stopPrice = draft.price;
-  if (draft.type !== 'market') result.timeInForce = draft.timeInForce || 'gtc';
+  if (draft.type !== 'market') result.timeInForce = draft.nativeTimeInForce || draft.timeInForce || 'gtc';
+  if (draft.expiresAt != null) result.expiresAt = draft.expiresAt;
   if (draft.stopLoss != null) result.stopLoss = draft.stopLoss;
   if (draft.takeProfit != null) result.takeProfit = draft.takeProfit;
   return result;

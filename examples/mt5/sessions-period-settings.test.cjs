@@ -6,6 +6,7 @@ test('each period keeps its own Fibonacci controls, line settings and outlined l
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
     const page = await browser.newPage({ viewport: { width: 1700, height: 1050 } });
+    await require('./market-fixture.cjs').mockMarket(page);
     page.setDefaultTimeout(7000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -43,6 +44,9 @@ test('each period keeps its own Fibonacci controls, line settings and outlined l
     }
     await open();
     const day = await period('Ngày trước');
+    assert.equal(await day.target.getByLabel('Hiện mức 50%', { exact: true }).count(), 0);
+    assert.equal(await day.fib.getByLabel('0%', { exact: true }).count(), 1);
+    assert.equal(await day.fib.getByLabel('100%', { exact: true }).count(), 1);
     assert.equal(await day.fib.getByLabel('50%', { exact: true }).isChecked(), true);
     assert.equal(await day.fib.getByLabel('38,2%', { exact: true }).isChecked(), false);
     assert.equal(await day.fib.getByLabel('Màu mức 50%', { exact: true }).inputValue(), '#00aabb');
@@ -51,6 +55,8 @@ test('each period keeps its own Fibonacci controls, line settings and outlined l
     await day.fib.getByLabel('61,8%', { exact: true }).check();
     await day.fib.getByLabel('Màu mức 61,8%', { exact: true }).fill('#aabbcc');
     await day.target.getByLabel('Màu viền chữ', { exact: true }).fill('#556677');
+    await day.target.getByLabel('Màu viền đường', { exact: true }).fill('#102030');
+    await day.target.getByLabel('Độ dày viền đường', { exact: true }).fill('2');
     await day.target.getByLabel('Kéo dài sang phải', { exact: true }).check();
     await day.target.getByLabel('Độ dày', { exact: true }).fill('3');
     await day.target.getByLabel('Kiểu nét').selectOption('dashed');
@@ -78,6 +84,8 @@ test('each period keeps its own Fibonacci controls, line settings and outlined l
       assert.equal(await target.getByLabel('Màu viền chữ', { exact: true }).inputValue(), outline);
     }
     const restored = await period('Ngày trước');
+    assert.equal(await restored.target.getByLabel('Màu viền đường', { exact: true }).inputValue(), '#102030');
+    assert.equal(await restored.target.getByLabel('Độ dày viền đường', { exact: true }).inputValue(), '2');
     assert.equal(await restored.target.getByLabel('Kéo dài sang phải', { exact: true }).isChecked(), true);
     assert.equal(await restored.target.getByLabel('Dời nhãn và đầu nét (số nến)', { exact: true }).inputValue(), '12');
     await dialog.getByRole('button', { name: 'Hủy', exact: true }).click();
@@ -103,7 +111,7 @@ test('each period keeps its own Fibonacci controls, line settings and outlined l
           ctx.moveTo = function (x, y) { path.push([x, y]); return methods.moveTo.call(this, x, y); };
           ctx.lineTo = function (x, y) { path.push([x, y]); return methods.lineTo.call(this, x, y); };
           ctx.stroke = function () {
-            if (this.strokeStyle === '#aabbcc') lines.push({ path: [...path], width: this.lineWidth });
+            if (['#aabbcc', '#102030'].includes(this.strokeStyle)) lines.push({ color: this.strokeStyle, path: [...path], width: this.lineWidth });
             return methods.stroke.call(this);
           };
           for (const method of ['strokeText', 'fillText']) ctx[method] = function (value, ...params) {
@@ -120,11 +128,13 @@ test('each period keeps its own Fibonacci controls, line settings and outlined l
       } finally { engine.overlayDraws = draws; }
       return { text, lines, right: chart.viewport.getState().chartRect.x + chart.viewport.getState().chartRect.width };
     });
-    for (const value of ['PDH', 'PDL', 'PD.5', 'PD 61,8%']) {
+    for (const value of ['PDH', 'PDL', 'PD 61,8%']) {
       assert.ok(rendered.text.some(text => text.method === 'strokeText' && text.value === value && text.color === '#556677'), value);
     }
     assert.ok(rendered.text.some(text => text.method === 'fillText' && text.value === 'PD 61,8%' && text.color === '#aabbcc'));
     assert.ok(rendered.lines.some(line => line.width === 3 && Math.abs(line.path[1][0] - rendered.right) < 1), 'period extension applies to Fibo');
+    assert.ok(rendered.lines.some(line => line.color === '#102030' && line.width === 7), 'line border is drawn behind the colored level');
+    assert.ok(!rendered.text.some(text => text.value === 'PD.5'), 'legacy duplicate midpoint is removed');
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });

@@ -1,6 +1,10 @@
 import { createOrderTicket } from './order-ticket.js';
-import { drawingOrder, roundPrice, translatedOrder } from './order-model.js';
+import { drawingOrder, roundPrice } from './order-model.js';
 import { orderProjection, pendingStopHandles } from './order-projection.js';
+import { installTradePreferences } from './chart-preferences.js';
+import { expiryChart } from './expiry-chart.js';
+import { expiryFields, timeLabel } from './order-time.js';
+import { tradeIssue, projectOrder } from './order-rules.js';
 
 // Every command is preflighted and bound to the displayed account. The user
 // chooses whether chart clicks require a preview or use One-click trading.
@@ -23,6 +27,7 @@ function button(text, click) {
 
 function dialog(title, transient = true) {
   const node = element('dialog', null, { class: 'mt5-dialog' });
+  node.setAttribute('aria-label', title);
   node.append(element('h2', title));
   document.body.append(node);
   if (transient) node.addEventListener('close', () => node.remove(), { once: true });
@@ -197,6 +202,8 @@ export function createMt5Trading(getActiveWidget) {
           row.entryPrice ?? row.price, `${row.stopLoss ?? '—'} / ${row.takeProfit ?? '—'}`,
           position ? money(row.profit, a.currency) : '']) tr.append(element('td', text));
         const actions = element('td');
+        actions.append(button('Thời hạn', () => editExpiry(row, position ? 'position' : 'order')));
+        if (row.expiresAt) actions.append(element('small', `${timeLabel(row.expiresAt, getActiveWidget()?.getSettings().timezone)} · ${row.expiryStatus || 'active'}${row.expiryError ? ` · ${row.expiryError}` : ''}`));
         if (position) actions.append(button('Sửa SL/TP', () => editPosition(row)), button('Đóng vị thế', () => review('close', { positionId: row.id, quantity: row.quantity }, row.symbol, a.id).catch(report)));
         else actions.append(button('Sửa giá', () => editOrder(row)), button('Hủy lệnh', () => review('cancel', { orderId: row.id }, row.symbol, a.id).catch(report)));
         tr.append(actions); table.append(tr);
@@ -230,7 +237,25 @@ export function createMt5Trading(getActiveWidget) {
     if (!ticket.open(owner, { quantity: quickLots.get(symbol) || quote.min, ...initial })) return;
     projection?.destroy();
     projection = orderProjection(owner, ticket.read, (field, value) => ticket.change(field, value, 'projection'), ticket.submit, ticket.close,
-      () => bracketModes.get(owner)?.active);
+      () => bracketModes.get(owner)?.active, row => ticket.update(row, 'projection'), () => {
+        ticket.update({ timeInForce: 'specified', expiresAt: ticket.read().draft.expiresAt || Date.now() + 3600000 });
+      });
+  }
+
+  function editExpiry(row, kind, owner = getActiveWidget()) {
+    const modal = dialog(`Thời hạn #${row.id}`), accountId = state.account.id;
+    const zone = () => owner?.getSettings().timezone || 'UTC'; let at = row.expiresAt || Date.now() + 3600000;
+    const status = element('p', '', { role: 'status', class: 'mt5-warning' });
+    const fields = expiryFields({ zone,
+      clock: value => { if (value) owner?.setTradePreferences({ clock: value }); return owner?.getTradePreferences?.().clock || '24h'; },
+      change(value) { at = value; } });
+    fields.render(at);
+    const save = value => review('setExpiry', { kind, ticket: row.id, expiresAt: value }, row.symbol, accountId)
+      .then(result => { if (result) modal.close(); }).catch(error => { status.textContent = error.message; });
+    modal.append(fields.root, element('p', 'Host sẽ hủy lệnh chờ hoặc đóng vị thế khi tới hạn. Host và MT5 phải chạy; nếu mất kết nối thì xử lý khi kết nối lại.'),
+      button('Lưu thời hạn', () => { try { at = fields.read(); void save(at); } catch (error) { status.textContent = error.message; } }),
+      button('Bỏ thời hạn', () => save(null)), button('Đóng', () => modal.close()), status);
+    modal.showModal();
   }
 
   function editPosition(row) {
@@ -271,6 +296,19 @@ export function createMt5Trading(getActiveWidget) {
 
   async function review(action, intent, symbol, accountId = state?.account.id) {
     if (busy || reviewOpen) throw new Error('Hãy hoàn tất hoặc hủy yêu cầu đang mở.');
+    if (action === 'place') { const issue = tradeIssue(intent, state?.quotes[symbol]); if (issue) throw new Error(issue); }
+    if (action === 'modifyPosition') {
+      const row = state?.positions.find(row => row.id === intent.positionId);
+      const issue = row && tradeIssue({ ...row, ...intent }, state?.quotes[symbol], 'position'); if (issue) throw new Error(issue);
+    }
+    if (action === 'modifyOrder') {
+      const row = state?.orders.find(row => row.id === intent.orderId);
+      if (row) {
+        const moved = { ...row, ...intent, price: row.type === 'stopLimit' ? intent.limitPrice ?? row.price : intent.newPrice,
+          ...(row.type === 'stopLimit' ? { stopPrice: intent.newPrice } : {}) };
+        const issue = tradeIssue(moved, state?.quotes[symbol], 'order'); if (issue) throw new Error(issue);
+      }
+    }
     const command = copy({ action, intent, symbol, account: accountId, requestId: uid() });
     if (armed && armedAccount === accountId) {
       busy = true; publish();
@@ -290,10 +328,11 @@ export function createMt5Trading(getActiveWidget) {
     catch (error) { reviewOpen = false; throw error; }
     const modal = dialog('Xác nhận gửi tới MT5'); modal.id = 'mt5-review';
     const a = checked.account;
-    const names = { place: 'Đặt lệnh', modifyOrder: 'Sửa giá lệnh chờ', cancel: 'Hủy lệnh chờ', modifyPosition: 'Sửa SL/TP', close: 'Đóng vị thế' };
+    const names = { place: 'Đặt lệnh', modifyOrder: 'Sửa giá lệnh chờ', cancel: 'Hủy lệnh chờ', modifyPosition: 'Sửa SL/TP', close: 'Đóng vị thế', setExpiry: 'Hẹn đóng / hủy lệnh' };
     const description = [`${a.demo ? 'DEMO' : 'TÀI KHOẢN THẬT'} · ${a.login} · ${a.server}`, `${names[action]} · ${symbol}`];
     if (intent.side) description.push(`${intent.side.toUpperCase()} ${intent.type.toUpperCase()} · ${intent.quantity} lot`);
     if (intent.positionId || intent.orderId) description.push(`Ticket ${intent.positionId || intent.orderId}`);
+    if ('expiresAt' in intent) description.push(`Thời hạn: ${timeLabel(intent.expiresAt, getActiveWidget()?.getSettings().timezone, getActiveWidget()?.getTradePreferences?.().clock)}`);
     if (action === 'close') description.push(`Đóng ${intent.quantity} lot`);
     if (intent.type && intent.type !== 'market') description.push(`Giá ${intent.price}`);
     if (intent.type === 'stopLimit') description.push(`Giá kích hoạt Stop ${intent.stopPrice} → Limit ${intent.price}`);
@@ -327,10 +366,12 @@ export function createMt5Trading(getActiveWidget) {
     });
   }
 
-  function attach(widget, activate) {
+  function attach(widget, activate, slot = 0) {
     const listeners = new Map();
     let disposed = false;
     const chart = widget.getChart();
+    const preferences = installTradePreferences(widget, { oneClick: () => armed, setOneClick, slot,
+      quote: () => connected ? state?.quotes[widget.getSymbol()] : null, accountId: () => state?.account.id });
     const mode = { active: false, account: state?.account.id, symbol: widget.getSymbol() };
     bracketModes.set(widget, mode);
     const bar = element('div', null, { class: 'mt5-quick-trade', 'aria-label': 'Giao dịch nhanh MT5' });
@@ -339,9 +380,6 @@ export function createMt5Trading(getActiveWidget) {
     quickSell.dataset.side = 'sell'; quickBuy.dataset.side = 'buy';
     quickSell.setAttribute('aria-label', 'Bán nhanh MT5'); quickBuy.setAttribute('aria-label', 'Mua nhanh MT5');
     const lots = element('input', null, { type: 'number', step: 'any', 'aria-label': 'Số lot giao dịch nhanh' });
-    const armedLabel = element('label', '1 nhấp');
-    const armedInput = element('input', null, { type: 'checkbox', 'aria-label': 'One-click trading trên chart' });
-    armedInput.addEventListener('change', () => setOneClick(armedInput.checked));
     const bracketButton = button('SL/TP', () => setBracketMode(!mode.active));
     bracketButton.className = 'mt5-bracket-mode';
     bracketButton.setAttribute('aria-label', 'Kéo SL/TP từ Entry');
@@ -353,7 +391,7 @@ export function createMt5Trading(getActiveWidget) {
     chart.on('drawingToolChange', resetBracketMode); chart.on('toolModeChange', resetBracketMode);
     window.addEventListener('keydown', escapeBracketMode);
     resetBracketMode();
-    armedLabel.prepend(armedInput); bar.append(quickSell, lots, quickBuy, armedLabel, bracketButton);
+    bar.append(quickSell, lots, quickBuy, bracketButton);
     widget.chartContainer.append(bar);
     const pendingStops = pendingStopHandles(widget, () => ({ orders: state?.orders.filter(row => row.symbol === widget.getSymbol()) || [],
       positions: state?.positions.filter(row => row.symbol === widget.getSymbol()) || [],
@@ -369,7 +407,15 @@ export function createMt5Trading(getActiveWidget) {
         if (row.takeProfit != null) intent.takeProfit = moved.takeProfit;
       } else intent[field] = moved[field];
       return review('modifyOrder', intent, row.symbol, accountId).catch(report);
-    }, () => busy || reviewOpen, activate, () => mode.active);
+    }, () => busy || reviewOpen, activate, () => mode.active, report, target => editExpiry(target.row, target.kind, widget));
+    const deadlines = expiryChart(widget, () => ({ accountId: state?.account.id, rows: [
+      ...[...(state?.orders || []), ...(state?.positions || [])].filter(row => row.symbol === widget.getSymbol() && row.expiresAt)
+        .map(row => ({ ...row, kind: row.entryPrice != null ? 'position' : 'order' })),
+      ...(ticket.read().widget === widget && ticket.read().draft?.expiresAt ? [{ ...ticket.read().draft, kind: 'draft', id: 'draft' }] : []),
+    ] }), (row, at, accountId) => {
+      if (row.kind === 'draft') { ticket.change('expiresAt', at); return; }
+      return review('setExpiry', { kind: row.kind, ticket: row.id, expiresAt: at }, row.symbol, accountId).catch(report);
+    }, () => busy || reviewOpen);
     lots.addEventListener('input', () => {
       const symbol = widget.getSymbol(); quickLots.set(symbol, Number(lots.value));
       try { sessionStorage.setItem(`mt5:quick-lots:${state?.account.id}:${symbol}`, lots.value); } catch { /* Keep the visible value. */ }
@@ -410,14 +456,15 @@ export function createMt5Trading(getActiveWidget) {
           }
           if (document.activeElement !== lots) lots.value = quickLots.get(symbol);
           lots.min = q.min; lots.max = q.max; lots.step = q.step;
-          quickSell.replaceChildren(element('span', 'SELL'), element('strong', Number(q.bid).toFixed(q.digits)));
-          quickBuy.replaceChildren(element('span', 'BUY'), element('strong', Number(q.ask).toFixed(q.digits)));
+          quickSell.replaceChildren(element('strong', Number(q.bid).toFixed(q.digits)), element('span', 'SELL'));
+          quickBuy.replaceChildren(element('strong', Number(q.ask).toFixed(q.digits)), element('span', 'BUY'));
         }
         for (const control of [quickSell, quickBuy]) {
           control.disabled = busy || reviewOpen || !connected || (armed && !state?.account.allowed);
           control.title = armed ? `${state?.account.login} · Gửi lệnh Market ngay · ${quickLots.get(symbol)} lot` : 'Mở phiếu đặt lệnh';
         }
-        armedInput.checked = armed; armedInput.disabled = busy || reviewOpen || !state;
+        bar.dataset.oneClick = String(armed);
+        preferences.publish();
         positionBar();
         adapter.emit('orders', state?.orders.filter(row => row.symbol === adapter.symbol()) || []);
         adapter.emit('positions', state?.positions.filter(row => row.symbol === adapter.symbol()) || []);
@@ -427,13 +474,20 @@ export function createMt5Trading(getActiveWidget) {
       async modifyOrder(intent) {
         const row = state?.orders.find(row => row.id === intent.orderId && row.symbol === adapter.symbol());
         if (!row) throw new Error('Lệnh chờ không còn tồn tại.');
-        const moved = translatedOrder(row, intent.newPrice, state.quotes[row.symbol]);
+        const moved = projectOrder(row, 'price', intent.newPrice, state.quotes[row.symbol], 'order');
         await review('modifyOrder', { orderId: row.id, newPrice: moved.stopPrice ?? moved.price,
           previousPrice: row.stopPrice ?? row.price, ...(row.type === 'stopLimit' ? { limitPrice: moved.price } : {}),
           ...(row.stopLoss != null ? { stopLoss: moved.stopLoss } : {}), ...(row.takeProfit != null ? { takeProfit: moved.takeProfit } : {}) }, adapter.symbol());
       },
       async cancelOrder(intent) { await review('cancel', intent, adapter.symbol()); },
-      async modifyPosition(intent) { await review('modifyPosition', intent, adapter.symbol()); },
+      async modifyPosition(intent) {
+        const row = state?.positions.find(row => row.id === intent.positionId);
+        let moved = row;
+        for (const field of ['stopLoss', 'takeProfit']) if (row && intent[field] != null) moved = projectOrder(moved, field, intent[field], state.quotes[row.symbol], 'position');
+        const guarded = { ...intent };
+        for (const field of ['stopLoss', 'takeProfit']) if (row && intent[field] != null) guarded[field] = moved[field];
+        await review('modifyPosition', guarded, adapter.symbol());
+      },
       async closePosition(intent) {
         const row = state?.positions.find(row => row.id === intent.positionId && row.symbol === adapter.symbol());
         await review('close', { ...intent, quantity: row?.quantity }, adapter.symbol());
@@ -472,7 +526,7 @@ export function createMt5Trading(getActiveWidget) {
       window.removeEventListener('keydown', escapeBracketMode); bracketModes.delete(widget);
       widget.chartContainer.removeEventListener('mousedown', preserveToolPress, true);
       widget.chartContainer.removeEventListener('touchstart', preserveToolPress, true);
-      pendingStops.destroy(); bar.remove(); chart.disconnectExecution();
+      pendingStops.destroy(); deadlines.destroy(); preferences.destroy(); bar.remove(); chart.disconnectExecution();
     };
   }
 

@@ -7,6 +7,7 @@ import secrets
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from trade_expiry import TradeExpiry
 
 
 class TradingError(ValueError):
@@ -33,6 +34,7 @@ class Mt5Trading:
         self.database = self.directory / '.trading-requests.sqlite3'
         with closing(sqlite3.connect(self.database)) as db, db:
             db.execute('CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, digest TEXT, result TEXT)')
+        self.expiry = TradeExpiry(self)
 
     def authorized(self, key):
         return isinstance(key, str) and secrets.compare_digest(key.encode('utf-8'), self.key.encode('ascii'))
@@ -82,6 +84,7 @@ class Mt5Trading:
                                       min=info.volume_min, max=info.volume_max, step=info.volume_step,
                                       tickSize=info.trade_tick_size or info.point, digits=info.digits,
                                       stops=info.trade_stops_level * info.point,
+                                      freeze=getattr(info, 'trade_freeze_level', 0) * info.point,
                                       contractSize=info.trade_contract_size, orderMode=info.order_mode,
                                       expirationMode=info.expiration_mode)
             positions = [dict(id=str(p.ticket), symbol=p.symbol, side='buy' if p.type == 0 else 'sell',
@@ -98,8 +101,27 @@ class Mt5Trading:
                                    price=o.price_stoplimit if kind == 'stopLimit' else o.price_open, quantity=o.volume_current,
                                    stopPrice=o.price_open if kind in ('stop', 'stopLimit') else None,
                                    stopLoss=o.sl or None, takeProfit=o.tp or None,
+                                   timeInForce={0: 'gtc', 1: 'day', 2: 'specified', 3: 'specified'}.get(o.type_time, 'gtc'),
+                                   expiresAt=o.time_expiration * 1000 if o.time_expiration else None,
                                    draggable=True))
-            return dict(account=account, positions=positions, orders=orders, quotes=quotes)
+            deadlines = self.expiry.rows(account['id'])
+            for row in [*positions, *orders]:
+                deadline = next((item for item in deadlines if item['ticket'] == row['id']), None)
+                if deadline:
+                    row.update(expiresAt=deadline['expires'], expiryStatus=deadline['status'], expiryError=deadline['error'])
+            # A filled pending deadline follows the resulting position's identifier.
+            for deadline in deadlines:
+                if deadline['kind'] != 'order' or any(row['id'] == deadline['ticket'] for row in orders):
+                    continue
+                try:
+                    kind, native = self.expiry.resolve(deadline)
+                    if kind == 'position':
+                        for row in positions:
+                            if row['id'] == str(native.ticket):
+                                row.update(expiresAt=deadline['expires'], expiryStatus=deadline['status'], expiryError=deadline['error'])
+                except (ValueError, RuntimeError):
+                    pass
+            return dict(account=account, positions=positions, orders=orders, quotes=quotes, deadlines=deadlines)
 
     def order_types(self):
         m = self.mt5
@@ -145,7 +167,7 @@ class Mt5Trading:
         _, account = self.account()
         if command.get('account') != account['id']:
             raise TradingError('Tài khoản MT5 đã thay đổi. Hãy kiểm tra lại tài khoản trên chart.')
-        if not account['allowed']:
+        if not account['allowed'] and command.get('action') != 'setExpiry':
             raise TradingError(account['reason'])
         m, action = self.mt5, command.get('action')
         symbol = command.get('symbol')
@@ -156,7 +178,30 @@ class Mt5Trading:
         if intent.get('trailingStop') is not None:
             raise TradingError('Kết nối này chưa hỗ trợ trailing stop. Hãy dùng SL cố định hoặc trailing trong MT5.')
         request = dict(symbol=symbol)
+        if action == 'setExpiry':
+            kind = intent.get('kind')
+            if kind not in ('position', 'order'):
+                raise TradingError('Loại thời hạn không hợp lệ.')
+            target = self.target('positions_get' if kind == 'position' else 'orders_get', intent.get('ticket'), symbol)
+            expires = self.expiry.validate(intent.get('expiresAt'))
+            native = None
+            if kind == 'order' and (info.expiration_mode & (4 if expires else 1)):
+                if not account['allowed']: raise TradingError(account['reason'])
+                native = dict(action=m.TRADE_ACTION_MODIFY, symbol=symbol, order=target.ticket, price=target.price_open,
+                              sl=target.sl, tp=target.tp, stoplimit=target.price_stoplimit,
+                              type_time=getattr(m, 'ORDER_TIME_SPECIFIED', 2) if expires else m.ORDER_TIME_GTC,
+                              expiration=expires // 1000 if expires else 0)
+            remove = []
+            if kind == 'position':
+                for prior in self.expiry.rows(account['id']):
+                    if prior['kind'] != 'order': continue
+                    found, position = self.expiry.resolve(prior)
+                    if found == 'position' and position.ticket == target.ticket: remove.append(prior['id'])
+            return dict(hostExpiry=True, kind=kind, ticket=str(target.ticket), expiresAt=expires, native=native, remove=remove,
+                        quantity=target.volume if kind == 'position' else target.volume_current,
+                        identifier=str(getattr(target, 'identifier', target.ticket)) if kind == 'position' else ''), account
         if action == 'place':
+            expires = self.expiry.validate(intent.get('expiresAt'))
             side, kind = intent.get('side'), intent.get('type')
             if side not in ('buy', 'sell') or kind not in ('market', 'limit', 'stop', 'stopLimit'):
                 raise TradingError('Loại lệnh không được hỗ trợ.')
@@ -174,15 +219,18 @@ class Mt5Trading:
                 self.market_price(request, info, side)
             else:
                 tif = intent.get('timeInForce', 'gtc')
-                if tif not in ('gtc', 'day'):
+                if tif not in ('gtc', 'day', 'specified'):
                     raise TradingError('Thời hạn lệnh không hợp lệ.')
-                flag = 1 if tif == 'gtc' else 2
+                flag = {'gtc': 1, 'day': 2, 'specified': 4}[tif]
                 if not info.expiration_mode & flag:
                     raise TradingError('Broker không hỗ trợ thời hạn lệnh này.')
                 request.update(action=m.TRADE_ACTION_PENDING, type=getattr(m, f'ORDER_TYPE_{side.upper()}_{"STOP_LIMIT" if kind == "stopLimit" else kind.upper()}'),
                                price=self.price(intent.get('stopPrice') if kind == 'stopLimit' else intent.get('price'), info, 'Giá Stop' if kind == 'stopLimit' else 'Giá đặt'),
-                               type_time=m.ORDER_TIME_GTC if tif == 'gtc' else m.ORDER_TIME_DAY,
+                               type_time={'gtc': m.ORDER_TIME_GTC, 'day': m.ORDER_TIME_DAY, 'specified': getattr(m, 'ORDER_TIME_SPECIFIED', 2)}[tif],
                                type_filling=m.ORDER_FILLING_RETURN)
+                if tif == 'specified':
+                    if expires is None: raise TradingError('Chọn ngày giờ hết hạn.')
+                    request['expiration'] = expires // 1000
                 if kind == 'stopLimit':
                     request['stoplimit'] = self.price(intent.get('price'), info, 'Giá Limit')
         elif action in ('modifyOrder', 'cancel'):
@@ -220,7 +268,38 @@ class Mt5Trading:
                                tp=self.price(intent['takeProfit'], info, 'TP', True) if 'takeProfit' in intent else position.tp)
         else:
             raise TradingError('Thao tác giao dịch không được hỗ trợ.')
+        self.validate_prices(request, info, action, intent)
         return request, account
+
+    def validate_prices(self, request, info, action, intent):
+        if action not in ('place', 'modifyOrder', 'modifyPosition'):
+            return
+        tick = self.mt5.symbol_info_tick(info.name)
+        if tick is None or tick.bid <= 0 or tick.ask < tick.bid:
+            raise TradingError('Chưa có Bid/Ask hợp lệ.')
+        gap = max(info.trade_stops_level * info.point, info.trade_tick_size or info.point)
+        eps = (info.trade_tick_size or info.point) / 100
+        if action == 'modifyPosition':
+            position = self.target('positions_get', intent['positionId'], info.name)
+            buy = position.type == self.mt5.POSITION_TYPE_BUY
+            entry = tick.bid if buy else tick.ask
+            gap = max(gap, getattr(info, 'trade_freeze_level', 0) * info.point)
+        else:
+            native = self.target('orders_get', intent['orderId'], info.name) if action == 'modifyOrder' else None
+            side, kind = self.order_types().get(native.type, (None, None)) if native else (intent['side'], intent['type'])
+            buy = side == 'buy'
+            entry = (tick.bid if buy else tick.ask) if kind == 'market' else request.get('stoplimit') if kind == 'stopLimit' else request['price']
+            if kind != 'market':
+                price = request['price']; at = tick.ask if buy else tick.bid
+                above = buy != (kind == 'limit')
+                if (price < at + gap - eps if above else price > at - gap + eps):
+                    raise TradingError(f'{side} {kind}: giá đặt sai phía {"Ask" if buy else "Bid"} hoặc quá gần giá hiện tại.')
+                if kind == 'stopLimit' and (entry > price + eps if buy else entry < price - eps):
+                    raise TradingError('Giá Limit nằm sai phía giá Stop.')
+        if request.get('sl') and (request['sl'] > entry - gap + eps if buy else request['sl'] < entry + gap - eps):
+            raise TradingError('SL nằm sai phía hoặc quá gần mức tham chiếu Bid/Ask/Entry.')
+        if request.get('tp') and (request['tp'] < entry + gap - eps if buy else request['tp'] > entry - gap + eps):
+            raise TradingError('TP nằm sai phía hoặc quá gần mức tham chiếu Bid/Ask/Entry.')
 
     def estimate(self, command):
         """Account-currency estimates, never order_check/order_send or a terminal permission change."""
@@ -306,7 +385,8 @@ class Mt5Trading:
     def check(self, command):
         with self.feed.lock:
             request, account = self.build(command)
-            self.checked(request)
+            if not request.get('hostExpiry'): self.checked(request)
+            elif request.get('native'): self.checked(request['native'])
             return dict(ok=True, account=account, request=request)
 
     def execute(self, command):
@@ -324,6 +404,23 @@ class Mt5Trading:
                     raise TradingError('Kết quả yêu cầu trước chưa xác định. Kiểm tra MT5; không gửi lại lệnh này.')
                 return json.loads(previous[1])
             request, _ = self.build(command)
+            if request.get('hostExpiry'):
+                if request.get('native'):
+                    self.checked(request['native'])
+                    db.execute('INSERT INTO requests VALUES (?,?,NULL)', (request_id, digest)); db.commit()
+                    _, latest = self.account()
+                    if latest['id'] != command['account'] or not latest['allowed']: raise TradingError('Tài khoản/quyền giao dịch đã đổi; chưa gửi sửa thời hạn.')
+                    sent = self.mt5.order_send(request['native'])
+                    ok = sent and sent.retcode in (self.mt5.TRADE_RETCODE_DONE, self.mt5.TRADE_RETCODE_NO_CHANGES)
+                    if not ok:
+                        response = dict(ok=False, uncertain=sent is None, error='Chưa xác định kết quả sửa thời hạn.' if sent is None else f'MT5 {sent.retcode}: {sent.comment}')
+                        db.execute('UPDATE requests SET result=? WHERE id=?', (json.dumps(response), request_id)); return response
+                for prior in request['remove']: db.execute('DELETE FROM deadlines WHERE id=?', (prior,))
+                self.expiry.save(db, command['account'], command['symbol'], request['ticket'], request['kind'],
+                                 request['expiresAt'], request['quantity'], request['identifier'])
+                response = dict(ok=True, expiresAt=request['expiresAt'])
+                db.execute('INSERT OR REPLACE INTO requests VALUES (?,?,?)', (request_id, digest, json.dumps(response)))
+                return response
             self.checked(request)
             db.execute('INSERT INTO requests VALUES (?, ?, NULL)', (request_id, digest))
             db.commit()  # Record before sending: a crash must never replay a trade.
@@ -341,5 +438,10 @@ class Mt5Trading:
                                 volume=result.volume, price=result.price,
                                 partial=result.retcode == self.mt5.TRADE_RETCODE_DONE_PARTIAL,
                                 error='' if ok else f'MT5 {result.retcode}: {result.comment}')
+                expires = command.get('intent', {}).get('expiresAt')
+                if ok and command.get('action') == 'place' and expires:
+                    # Follow the opening order's history position_id, rather
+                    # than assuming order and position ticket numbers match.
+                    self.expiry.save(db, command['account'], command['symbol'], str(result.order), 'order', expires, request['volume'])
             db.execute('UPDATE requests SET result=? WHERE id=?', (json.dumps(response), request_id))
             return response

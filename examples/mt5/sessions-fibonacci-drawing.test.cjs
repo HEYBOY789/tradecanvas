@@ -68,4 +68,9 @@ test('Fibonacci is drawn inside the closed session with centered outlined number
   assert.equal(strokes.length, 4, 'two levels are retained on each completed session');
   assert.deepEqual(strokes.map(line => line.path[0][0]), [9, 9, 49, 49]);
   assert.deepEqual(texts.filter(text => text.kind === 'fill').map(text => text.x), [19, 19, 59, 59]);
+  for (const options of Object.values(settings.sessions)) Object.assign(options, { start: '08:00', end: '10:00', enabled: false, fibonacci: true });
+  settings.fibonacci.levels = { p000: true, p100: true }; settings.fibonacci.history = false;
+  config.params.sessionSettings = JSON.stringify(settings); strokes.length = 0; texts.length = 0;
+  plugin.render(ctx, plugin.calculate(bars, config), { ...viewport, visibleRange: { from: 0, to: 7 }, priceRange: { min: 80, max: 170 } });
+  assert.deepEqual(texts.filter(text => text.kind === 'fill').map(text => text.text), ['PAL', 'PAH', 'PLDL', 'PLDH', 'PNYL', 'PNYH']);
 });

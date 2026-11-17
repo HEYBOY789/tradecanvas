@@ -6,6 +6,7 @@ test('M5 and M15 mirror the crosshair price even within the same candle', async 
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
     const page = await browser.newPage({ viewport: { width: 1740, height: 1000 } });
+    await require('./market-fixture.cjs').mockMarket(page);
     await page.route('**/app.js', async route => {
       const response = await route.fetch();
       const marker = 'installGridLayoutPersistence(grid);';
@@ -27,7 +28,7 @@ test('M5 and M15 mirror the crosshair price even within the same candle', async 
       const start = end - 2 * 3600000;
       for (const chart of [left, right]) chart.setVisibleRange(start, end);
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      for (const chart of [left, right]) chart.setAutoScale(false);
+      for (const chart of [left, right]) { chart.setAutoScale(false); chart.setCrosshairMode('normal'); }
       window.crosshairLines = [];
       const render = right.engine.renderPanelCrosshair;
       right.engine.renderPanelCrosshair = function (ctx, ...args) {
@@ -61,7 +62,11 @@ test('M5 and M15 mirror the crosshair price even within the same candle', async 
     });
     for (const move of moves) {
       await page.mouse.move(move.x, move.y);
-      await page.waitForFunction(y => window.crosshairLines.some(line => Math.abs(line[0][1] - y) < 2), move.expected, { timeout: 3000 });
+      await page.waitForFunction(y => window.crosshairLines.some(line => Math.abs(line[0][1] - y) < 2), move.expected, { timeout: 3000 }).catch(async error => {
+        throw new Error(`${error.message}; ${JSON.stringify(await page.evaluate(move => ({ move, lines: window.crosshairLines,
+          target: document.elementFromPoint(move.x, move.y)?.outerHTML.slice(0, 220),
+          ranges: testGrid.getWidgets().map(w => w.getChart().viewport.getState().priceRange) }), move))}`);
+      });
     }
     assert.ok(Math.abs(moves[0].expected - moves[1].expected) > 5, 'same candle has different cursor prices');
     await page.evaluate(() => testGrid.setSync({ crosshair: false }));

@@ -6,6 +6,7 @@ test('native chart picker, independent MT5 timeframes and saved layouts', async 
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
     const page = await browser.newPage({ viewport: { width: 1740, height: 1000 } });
+    await require('./market-fixture.cjs').mockMarket(page);
     page.setDefaultTimeout(10000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
