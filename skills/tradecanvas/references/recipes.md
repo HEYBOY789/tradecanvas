@@ -180,10 +180,11 @@ sized element and call `destroy()` in the unmount hook.
 An app that wants to credit TradeCanvas places the badge: the words, the mark
 and the wordmark as one link, in the text colour around it (so it follows the
 app's theme). `size` / `height` is the mark's height in px, from 12; 14–16
-fits a status strip.
+fits a status strip. Import it from `@tradecanvas/chart/brand`, which reaches
+none of the chart, so a page with the badge and no chart stays small.
 
 ```ts
-import { createPoweredBy } from '@tradecanvas/chart';
+import { createPoweredBy } from '@tradecanvas/chart/brand';
 
 document.querySelector('#status-bar')?.append(createPoweredBy({ height: 14 }));
 ```
@@ -674,6 +675,22 @@ chart.addIndicator('candlepatterns'); // arrows and short names on the bars that
 for (const m of detectCandlePatterns(bars, { patterns: ['bullishEngulfing', 'hammer', 'morningStar'] })) {
   console.log(new Date(m.time).toISOString(), m.pattern.name, m.pattern.direction);
 }
+```
+
+On a page that draws no chart (a scanner, a screener), import the detector from
+`@tradecanvas/core/patterns`: a few kB in a chunk of its own, without the chart's
+engine, even when other pages of the app draw charts. Add `@tradecanvas/core` to
+the app's dependencies first (`@tradecanvas/chart` brings it, but a strict
+installer such as pnpm only lets the app import what it lists).
+
+```ts
+import { detectCandlePatterns, CANDLE_PATTERNS } from '@tradecanvas/core/patterns';
+import type { OHLCBar } from '@tradecanvas/chart';
+
+declare const bars: OHLCBar[];
+
+const bullish = detectCandlePatterns(bars).filter((m) => m.pattern.direction === 'bullish');
+console.log(bullish.length, 'of', CANDLE_PATTERNS.length, 'patterns known');
 ```
 
 ## A custom indicator

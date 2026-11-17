@@ -1,5 +1,35 @@
 # @tradecanvas/chart
 
+## 2.13.1
+
+### Patch Changes
+
+- 5f40b8b: The legend takes less of a phone's chart. An indicator's row in `ChartWidget`'s legend showed its buttons (show, settings, more, remove) at all times on a touch screen, so a few rows covered the candles at the top left; they now show once a tap opens the row, as a hover does with a mouse, and a tap of its name then opens the settings. They are further apart for a thumb. A pane's first row stops short of the pane's buttons, which covered the end of its values. On a chart too narrow for the legend's prices on one line, the volume ends their last line when it fits there, instead of taking a line of its own.
+- Updated dependencies [5f40b8b]
+  - @tradecanvas/core@2.13.1
+  - @tradecanvas/commons@2.13.1
+
+## 2.13.0
+
+### Patch Changes
+
+- 8850740: The chart's screen-reader summary follows the last bar: its "Last price" is said again, at most once a second, when a feed's `bar` updates (forming or closed), `updateLastBar`, `updateLastBarFromTick`, or a replay's steps and forming bar change the last bar's close, not only when the series grows.
+- 196e02e: The order book during a replay: `pushDepthSnapshot` without a time stamps a live book at the live series' last bar, not at the bar the replay is on; the liquidity heatmap draws only the books of the bars the replay has shown, and all of them again after it; the depth overlay, the live market's book, is not drawn beside a replay's price and comes back when it ends. `DepthHeatmapRenderer.setShownUntil(time)` draws only the books stamped before `time` (null draws them all).
+- 77aa135: `ChartWidget`'s replay bar is a row under the chart, across the widget, instead of a bar floating over the main pane's foot: the chart is made shorter for it while it is open, so the volume and the bottom panes are no longer covered. The widget no longer sets `--tcw-replay-foot` or `--tcw-replay-plot-*` on it.
+- Updated dependencies [b27aa3f]
+- Updated dependencies [196e02e]
+  - @tradecanvas/core@2.13.0
+  - @tradecanvas/commons@2.13.0
+
+## 2.12.1
+
+### Patch Changes
+
+- e299da1: HNX_SESSIONS and UPCOM_SESSIONS (and so MARKET_HNX and MARKET_UPCOM) open at 09:00 instead of 09:15: neither exchange has an opening auction, so continuous matching starts at 9:00. UPCOM_SESSIONS' afternoon runs to 15:00 instead of 14:30, as UPCoM has no closing auction and matches until 15:00.
+- Updated dependencies [e299da1]
+  - @tradecanvas/commons@2.12.1
+  - @tradecanvas/core@2.12.1
+
 ## 2.12.0
 
 ### Minor Changes

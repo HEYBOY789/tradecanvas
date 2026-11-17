@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Imports
+
+- **The Powered by badge without the chart** (`@tradecanvas/chart`, `@tradecanvas/svelte`): `@tradecanvas/chart/brand` exports the badge, `createPoweredBy`, `poweredByHtml`, `poweredByLayout`, the mark and the wordmark, and reaches none of the chart. The Svelte `<PoweredBy>` imported them from the main entry, and a bundler could not leave the chart behind, so a page that showed the badge in its footer and drew no chart loaded the chart's engine with it: an app that only mounted the badge took 30 kB gzipped at the start and 82 kB in all. `<PoweredBy>` now imports from the new entry, and the same app takes 20 kB, Svelte's included. The main entry still exports the same names.
+
+## 2.13.1 (2026-11-17)
+
+### Fixes
+
+- **The legend takes less of a phone's chart** (`@tradecanvas/core`, `@tradecanvas/chart`): on a touch screen each indicator's row in `ChartWidget`'s legend showed its four buttons (show, settings, more, remove) at all times, so two rows covered a block of candles at the top left and a pane's row a third of a small pane. A row now shows only its name and values; a tap opens it to show the buttons, as a hover does with a mouse, a tap of its name then opens the settings, and a tap of the row again, of another row or outside the legend closes it. The buttons are bigger and further apart for a thumb. A mouse and the keyboard work as before. A pane's first row now stops short of the pane's buttons at its top right, which covered the end of its values on a narrow chart. On a chart too narrow for the legend's prices on one line, the volume now ends their last line when it fits there instead of taking a line of its own, so a phone's legend is a line shorter.
+
+## 2.13.0 (2026-11-16)
+
+### Imports
+
+- **The candle patterns on their own** (`@tradecanvas/core`): `@tradecanvas/core/patterns` exports `detectCandlePatterns` and `CANDLE_PATTERNS`, the same two the main entry exports, and reaches none of the engine. A page that finds patterns and draws no chart, such as a scanner or a screener, loads about 4 kB gzipped in a chunk of its own instead of the chart's, even when other pages of the app draw charts. The app lists `@tradecanvas/core` in its dependencies to import it. `@tradecanvas/core` is now built from two entries; what it exports is unchanged.
+
+### Fixes
+
+- **The replay bar sits under the chart** (`@tradecanvas/chart`): `ChartWidget`'s replay bar floated over the foot of the main pane and covered the volume there. It is now a row of the widget under the chart, across its width and above the account panel and the status bar, and the chart is made shorter for it while it is open. Its tiers follow the widget's width; on a phone it still takes two rows. A host's CSS that placed it through `--tcw-replay-foot` or `--tcw-replay-plot-start` and `--tcw-replay-plot-end` no longer needs them: the widget no longer sets them. CSS that gave the bar's part (`replay`) a position or an offset of its own should drop it.
+- **The order book stays out of a replay** (`@tradecanvas/core`, `@tradecanvas/chart`): a live book recorded during a replay (`pushDepthSnapshot`, or `widget.setDepth`, with no time) was stamped at the bar the replay was on, so as the replay moved, the liquidity heatmap filled the replayed bars with today's book. It is now stamped at the live series' last bar. The heatmap draws only the books of the bars the replay has shown, and all of them again when it ends. The depth overlay at the plot's right edge, the live market's book, is not drawn beside the replay's price either, and comes back when the replay ends. `DepthHeatmapRenderer.setShownUntil(time)` draws only the books stamped before `time`.
+- **The screen-reader summary follows the live price** (`@tradecanvas/chart`): the chart's `aria-label` ("… Last price 50,100.00.") was set again only when the series grew, so a forming bar's new closes, from a feed's `bar` updates, `updateLastBar` or `updateLastBarFromTick`, left it on the price it had when the bar began, and a replay left it on the live price. It now follows the last bar shown, the replay's included, at most once a second while a feed streams or a replay plays.
+
+## 2.12.1 (2026-11-16)
+
+### Fixes
+
+- **HNX and UPCoM open at 9:00** (`@tradecanvas/commons`, `@tradecanvas/chart`): `HNX_SESSIONS` and `UPCOM_SESSIONS`, and so `MARKET_HNX` and `MARKET_UPCOM`, started continuous matching at 9:15, but neither exchange has an opening auction: both match from 9:00. UPCoM now matches until 15:00, not 14:30, as it has no closing auction. HNX's afternoon, closing auction and post-close session are unchanged.
+
 ## 2.12.0 (2026-11-15)
 
 ### Finance charts

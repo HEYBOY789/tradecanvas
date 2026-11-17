@@ -1,6 +1,6 @@
 {
   "name": "@tradecanvas/chart",
-  "version": "2.12.0",
+  "version": "2.13.1",
   "type": "module",
   "description": "Open-source trading chart library for the web: candlestick to Renko charts, technical indicators, drawing tools, live exchange feeds, orders on the chart, bar replay. Canvas 2D or WebGL, TypeScript, no dependencies.",
   "license": "MIT",
@@ -56,6 +56,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./brand": {
+      "types": "./dist/brand/index.d.ts",
+      "import": "./dist/brand/index.js",
+      "require": "./dist/brand/index.cjs"
     },
     "./widget": {
       "types": "./dist/widget/index.d.ts",

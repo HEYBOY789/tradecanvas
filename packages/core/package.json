@@ -1,6 +1,6 @@
 {
   "name": "@tradecanvas/core",
-  "version": "2.12.0",
+  "version": "2.13.1",
   "type": "module",
   "description": "The rendering engine of @tradecanvas/chart, the open-source trading chart library: viewport, Canvas 2D and WebGL renderers, indicators, drawing tools.",
   "license": "MIT",
@@ -37,6 +37,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./patterns": {
+      "types": "./dist/patterns/index.d.ts",
+      "import": "./dist/patterns/index.js",
+      "require": "./dist/patterns/index.cjs"
     }
   },
   "files": [
