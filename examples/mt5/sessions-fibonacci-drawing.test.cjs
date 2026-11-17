@@ -10,6 +10,7 @@ test('Fibonacci is drawn inside the closed session with centered outlined number
   settings.fibonacci.colors.p382 = '#123456';
   settings.fibonacci.colors.p500 = '#654321';
   settings.fibonacci.labelOutlineColor = '#aabbcc';
+  settings.fibonacci.labelOutlineWidth = .25;
   // A stale layout's former extension flag must not extend Fibonacci.
   settings.fibonacci.extend = true;
   for (const options of Object.values(settings.sessions)) Object.assign(options, { enabled: false, fibonacci: false });
@@ -45,7 +46,7 @@ test('Fibonacci is drawn inside the closed session with centered outlined number
     beginPath() { path = []; }, rect() {}, clip() {}, setLineDash() {},
     moveTo(x, y) { path.push([x, y]); }, lineTo(x, y) { path.push([x, y]); },
     stroke() { strokes.push({ color: this.strokeStyle, path: [...path] }); },
-    strokeText(text, x, y) { texts.push({ kind: 'outline', text, x, y, color: this.strokeStyle, align: this.textAlign, baseline: this.textBaseline }); },
+    strokeText(text, x, y) { texts.push({ kind: 'outline', text, x, y, color: this.strokeStyle, width: this.lineWidth, align: this.textAlign, baseline: this.textBaseline }); },
     fillText(text, x, y) { texts.push({ kind: 'fill', text, x, y, color: this.fillStyle, align: this.textAlign, baseline: this.textBaseline }); },
   };
   const viewport = { chartRect: { x: 0, y: 0, width: 400, height: 300 },
@@ -57,6 +58,7 @@ test('Fibonacci is drawn inside the closed session with centered outlined number
     [['38,2%', '#123456', 19], ['50%', '#654321', 19]]);
   assert.ok(texts.every(text => text.align === 'center' && text.baseline === 'middle'));
   assert.ok(texts.filter(text => text.kind === 'outline').every(text => text.color === '#aabbcc'));
+  assert.ok(texts.filter(text => text.kind === 'outline').every(text => text.width === .25), 'label outline accepts a fractional width');
   assert.equal(texts[0].y, texts[1].y, 'outline and fill share the same baseline');
 
   bars.push(...[7, 8, 9, 10].map(hour => ({ time: Date.UTC(2026, 10, 17, hour), open: 110, high: 160, low: 90, close: 120 })));
@@ -73,4 +75,9 @@ test('Fibonacci is drawn inside the closed session with centered outlined number
   config.params.sessionSettings = JSON.stringify(settings); strokes.length = 0; texts.length = 0;
   plugin.render(ctx, plugin.calculate(bars, config), { ...viewport, visibleRange: { from: 0, to: 7 }, priceRange: { min: 80, max: 170 } });
   assert.deepEqual(texts.filter(text => text.kind === 'fill').map(text => text.text), ['PAL', 'PAH', 'PLDL', 'PLDH', 'PNYL', 'PNYH']);
+  settings.fibonacci.labelOutlineWidth = 0;
+  config.params.sessionSettings = JSON.stringify(settings); texts.length = 0;
+  plugin.render(ctx, plugin.calculate(bars, config), { ...viewport, visibleRange: { from: 0, to: 7 }, priceRange: { min: 80, max: 170 } });
+  assert.equal(texts.filter(text => text.kind === 'outline').length, 0, 'zero disables the text stroke');
+  assert.equal(texts.filter(text => text.kind === 'fill').length, 6, 'labels remain visible without an outline');
 });

@@ -52,6 +52,8 @@ In All-In-One Sessions → **Fibonacci phiên trước**, enable **Giữ Fibo ph
 
 Sessions and day/week/month Fibonacci settings now include **0%** and **100%** with independent visibility and colors. Endpoints always denote Low and High: **PAL/PAH**, **PLDL/PLDH**, **PNYL/PNYH** for previous Asia/London/New York, and the period's usual Low/High names (PDL/PDH, PWL/PWH, etc.). The direction setting reverses the internal retracement levels. Period lines have their own border color/width. The old separate midpoint setting is removed; its saved enabled value migrates to the period's Fibonacci **50%**, avoiding duplicate lines.
 
+Line and border thickness accept fractional pixels in **0.05 px** increments, including **0.25** and **0.5 px**. **Độ dày viền chữ** controls period labels; **Độ dày viền số Fibo** controls session Fibonacci labels. Both default to **1 px** instead of the former fixed 4 px; **0** disables the text outline while retaining its fill color. Each indicator instance and saved layout retains its own values.
+
 ## Shared layouts over LAN
 
 Named layouts are stored on the MT5 host in `layouts/layouts.sqlite3`, independently of any browser. Every LAN client uses the same save/open/rename/delete menu and sees updates to the shared list within about one second. A fresh browser opens the most recently saved layout; each browser subsequently remembers which layout it opened.

@@ -56,9 +56,10 @@ test('each period keeps its own Fibonacci controls, line settings and outlined l
     await day.fib.getByLabel('Màu mức 61,8%', { exact: true }).fill('#aabbcc');
     await day.target.getByLabel('Màu viền chữ', { exact: true }).fill('#556677');
     await day.target.getByLabel('Màu viền đường', { exact: true }).fill('#102030');
-    await day.target.getByLabel('Độ dày viền đường', { exact: true }).fill('2');
+    await day.target.getByLabel('Độ dày viền đường', { exact: true }).fill('0.25');
+    await day.target.getByLabel('Độ dày viền chữ', { exact: true }).fill('0.5');
     await day.target.getByLabel('Kéo dài sang phải', { exact: true }).check();
-    await day.target.getByLabel('Độ dày', { exact: true }).fill('3');
+    await day.target.getByLabel('Độ dày', { exact: true }).fill('0.5');
     await day.target.getByLabel('Kiểu nét').selectOption('dashed');
     await day.target.getByLabel('Dời nhãn và đầu nét (số nến)', { exact: true }).fill('12');
     const week = await period('Tuần trước');
@@ -85,7 +86,9 @@ test('each period keeps its own Fibonacci controls, line settings and outlined l
     }
     const restored = await period('Ngày trước');
     assert.equal(await restored.target.getByLabel('Màu viền đường', { exact: true }).inputValue(), '#102030');
-    assert.equal(await restored.target.getByLabel('Độ dày viền đường', { exact: true }).inputValue(), '2');
+    assert.equal(await restored.target.getByLabel('Độ dày viền đường', { exact: true }).inputValue(), '0.25');
+    assert.equal(await restored.target.getByLabel('Độ dày viền chữ', { exact: true }).inputValue(), '0.5');
+    assert.equal(await restored.target.getByLabel('Độ dày', { exact: true }).inputValue(), '0.5');
     assert.equal(await restored.target.getByLabel('Kéo dài sang phải', { exact: true }).isChecked(), true);
     assert.equal(await restored.target.getByLabel('Dời nhãn và đầu nét (số nến)', { exact: true }).inputValue(), '12');
     await dialog.getByRole('button', { name: 'Hủy', exact: true }).click();
@@ -116,7 +119,7 @@ test('each period keeps its own Fibonacci controls, line settings and outlined l
           };
           for (const method of ['strokeText', 'fillText']) ctx[method] = function (value, ...params) {
             if (/^PD(?:H|L|\.5| )/.test(value)) text.push({ method, value,
-              color: method === 'strokeText' ? this.strokeStyle : this.fillStyle });
+              width: this.lineWidth, color: method === 'strokeText' ? this.strokeStyle : this.fillStyle });
             return methods[method].call(this, value, ...params);
           };
           try { return draw(ctx); } finally { Object.assign(ctx, methods); }
@@ -129,11 +132,11 @@ test('each period keeps its own Fibonacci controls, line settings and outlined l
       return { text, lines, right: chart.viewport.getState().chartRect.x + chart.viewport.getState().chartRect.width };
     });
     for (const value of ['PDH', 'PDL', 'PD 61,8%']) {
-      assert.ok(rendered.text.some(text => text.method === 'strokeText' && text.value === value && text.color === '#556677'), value);
+      assert.ok(rendered.text.some(text => text.method === 'strokeText' && text.value === value && text.color === '#556677' && text.width === .5), value);
     }
     assert.ok(rendered.text.some(text => text.method === 'fillText' && text.value === 'PD 61,8%' && text.color === '#aabbcc'));
-    assert.ok(rendered.lines.some(line => line.width === 3 && Math.abs(line.path[1][0] - rendered.right) < 1), 'period extension applies to Fibo');
-    assert.ok(rendered.lines.some(line => line.color === '#102030' && line.width === 7), 'line border is drawn behind the colored level');
+    assert.ok(rendered.lines.some(line => line.color === '#aabbcc' && line.width === .5 && Math.abs(line.path[1][0] - rendered.right) < 1), 'fractional line width survives layout reload');
+    assert.ok(rendered.lines.some(line => line.color === '#102030' && line.width === 1), 'fractional line border is drawn behind the colored level');
     assert.ok(!rendered.text.some(text => text.value === 'PD.5'), 'legacy duplicate midpoint is removed');
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }

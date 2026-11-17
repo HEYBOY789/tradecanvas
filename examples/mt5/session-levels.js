@@ -188,15 +188,15 @@ function drawLine(ctx, y, start, end, color, width, style) {
   ctx.stroke();
 }
 
-function drawLabel(ctx, rect, x, y, text, color, align = 'right', outlineColor) {
+function drawLabel(ctx, rect, x, y, text, color, align = 'right', outlineColor, outlineWidth = 1) {
   if (!text || x < rect.x || x > rect.x + rect.width || y < rect.y || y > rect.y + rect.height) return;
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = 'bottom';
-  if (outlineColor) {
+  if (outlineColor && outlineWidth > 0) {
     ctx.save();
     ctx.lineJoin = 'round';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = outlineWidth;
     ctx.setLineDash([]);
     ctx.strokeStyle = outlineColor;
     ctx.strokeText(text, x, y - 2);
@@ -287,7 +287,7 @@ function drawPeriods(ctx, viewport, bars, lines) {
     const y = priceToY(line.price, viewport);
     if (options.lineBorderWidth > 0) drawLine(ctx, y, start, end, options.lineBorderColor, options.width + options.lineBorderWidth * 2, options.style);
     drawLine(ctx, y, start, end, line.color, options.width, options.style);
-    if (end >= start && options.label) drawLabel(ctx, rect, Math.min(anchor + 4, right - 4), y, line.name, line.color, 'right', options.labelOutlineColor);
+    if (end >= start && options.label) drawLabel(ctx, rect, Math.min(anchor + 4, right - 4), y, line.name, line.color, 'right', options.labelOutlineColor, options.labelOutlineWidth);
   }
 }
 
@@ -305,12 +305,13 @@ function drawFibonacci(ctx, viewport, line) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
-    ctx.lineWidth = 4;
+    const outlineWidth = line.options.labelOutlineWidth ?? 1;
+    if (outlineWidth > 0) ctx.lineWidth = outlineWidth;
     ctx.setLineDash([]);
     ctx.strokeStyle = line.options.labelOutlineColor;
     ctx.fillStyle = line.color;
     const x = (start + end) / 2;
-    ctx.strokeText(line.name, x, y);
+    if (outlineWidth > 0) ctx.strokeText(line.name, x, y);
     ctx.fillText(line.name, x, y);
   } finally {
     ctx.restore();

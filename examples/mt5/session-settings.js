@@ -44,10 +44,10 @@ export const DEFAULTS = {
   fibonacci: {
     levels: Object.fromEntries(FIBONACCI_LEVELS.map(([id]) => [id, true])),
     colors: { ...FIBONACCI_COLORS },
-    direction: 'Low → High', width: 1, style: 'solid', label: true, history: false, labelOutlineColor: '#0c1016',
+    direction: 'Low → High', width: 1, style: 'solid', label: true, history: false, labelOutlineColor: '#0c1016', labelOutlineWidth: 1,
   },
   periods: Object.fromEntries(PERIODS.map(([id, , , , enabled, open]) => [id, {
-    enabled, label: enabled, extend: false, width: 1, style: 'solid', labelOutlineColor: '#0c1016', lineBorderColor: '#0c1016', lineBorderWidth: 0,
+    enabled, label: enabled, extend: false, width: 1, style: 'solid', labelOutlineColor: '#0c1016', labelOutlineWidth: 1, lineBorderColor: '#0c1016', lineBorderWidth: 0,
     ...(open ? { openColor: BLUE } : {
       offset: 0, highColor: GREEN, lowColor: RED,
       fibonacci: PREVIOUS_PERIODS.includes(id),
@@ -74,6 +74,7 @@ function migratePeriodFibonacci(snapshot) {
     periods[id] = {
       ...options,
       labelOutlineColor: options.labelOutlineColor ?? snapshot.fibonacci?.labelOutlineColor,
+      labelOutlineWidth: options.labelOutlineWidth ?? snapshot.fibonacci?.labelOutlineWidth,
       ...(!open ? {
         fibonacci: options.mid === true ? true : options.fibonacci,
         fibonacciLevels: options.mid === true ? { ...(options.fibonacciLevels ?? snapshot.fibonacci?.levels), p500: true } : options.fibonacciLevels ?? snapshot.fibonacci?.levels,
@@ -165,8 +166,8 @@ export function createSessionSettings(validateZone) {
     field(parent, [...path, 'end'], 'Kết thúc', 'time', { required: true });
   }
 
-  function lineStyle(parent, path, widthKey = 'width', styleKey = 'style', min = 1) {
-    field(parent, [...path, widthKey], 'Độ dày', 'number', { min, max: min ? '4' : '', required: true });
+  function lineStyle(parent, path, widthKey = 'width', styleKey = 'style', min = .05) {
+    field(parent, [...path, widthKey], 'Độ dày', 'number', { min, max: min ? '4' : '', step: .05, required: true });
     field(parent, [...path, styleKey], 'Kiểu nét', 'select', styles);
   }
 
@@ -213,6 +214,7 @@ export function createSessionSettings(validateZone) {
   field(fibonacci, ['fibonacci', 'direction'], 'Chiều Fibo (0% → 100%)', 'select', ['Low → High', 'High → Low']);
   checks(fibonacci, ['fibonacci'], [['label', 'Hiện số Fibo'], ['history', 'Giữ Fibo phiên cũ']]);
   field(fibonacci, ['fibonacci', 'labelOutlineColor'], 'Màu viền số Fibo', 'color');
+  field(fibonacci, ['fibonacci', 'labelOutlineWidth'], 'Độ dày viền số Fibo', 'number', { min: 0, max: 4, step: .05, required: true });
   lineStyle(fibonacci, ['fibonacci']);
 
   const sessions = group(form, 'Phiên giao dịch', true);
@@ -235,8 +237,9 @@ export function createSessionSettings(validateZone) {
     const path = ['periods', id];
     checks(controls, path, [['enabled', 'Hiện mức'], ['extend', 'Kéo dài sang phải'], ['label', 'Hiện nhãn']]);
     field(controls, [...path, 'labelOutlineColor'], 'Màu viền chữ', 'color');
+    field(controls, [...path, 'labelOutlineWidth'], 'Độ dày viền chữ', 'number', { min: 0, max: 4, step: .05, required: true });
     field(controls, [...path, 'lineBorderColor'], 'Màu viền đường', 'color');
-    field(controls, [...path, 'lineBorderWidth'], 'Độ dày viền đường', 'number', { min: 0, max: 4, required: true });
+    field(controls, [...path, 'lineBorderWidth'], 'Độ dày viền đường', 'number', { min: 0, max: 4, step: .05, required: true });
     lineStyle(controls, path);
     if (open) {
       field(controls, [...path, 'openColor'], 'Màu giá mở', 'color');
