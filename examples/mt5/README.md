@@ -49,6 +49,12 @@ Pending orders use native broker expiration when supported; host tracking follow
 
 Under **Chart Settings → Symbol → Last price**, **Đường giá** controls the native Bid line and its optional Ask companion. There is one **Đường giá Ask** checkbox, shown only while the price line is enabled. **Màu Bid** and **Màu Ask** replace the direction-based Up/Down colors; both lines share the same dash and width. Bid keeps its chosen color when the market moves down, and no duplicate Bid overlay is drawn. Live quotes update each second; replay uses its historical last price and hides live Ask. The Ask choice, native line styles and 12/24-hour clock preference are saved per chart in named/imported/shared layouts, with cancellation restoring previous values. Legacy layouts' separate Bid flag is ignored. Loading a layout never creates a trade deadline or enables One-click.
 
+## Seasonal session hours
+
+In **All-In-One Sessions → Phiên giao dịch → London / New York**, enable **Tự đổi giờ mùa đông/hè** and enter the session's **summer hours** in **Múi giờ phiên**. With a fixed GMT/UTC offset, winter moves both boundaries one hour later. The option defaults off, so old layouts and manually configured hours retain their behavior; each indicator instance saves it independently, including a Sessions instance on CVD.
+
+The UK and US calendars are evaluated separately for each bar's historical date, including the weeks when only one market has switched. Session boxes, opening lines, previous-session Fibonacci and retained history all use the same adjusted range. Overnight shifts preserve the session date; a display timezone that already observes DST is compensated rather than shifted twice. The Asian session retains its entered schedule. Calendar references: [UK clock changes](https://www.gov.uk/when-do-the-clocks-change), [NIST US DST rules](https://www.nist.gov/pml/time-and-frequency-division/popular-links/daylight-saving-time-dst).
+
 ## Sessions Fibonacci history
 
 In All-In-One Sessions → **Fibonacci phiên trước**, enable **Giữ Fibo phiên cũ**. Each completed session retains its selected levels inside its own time range. This is separate from **Giữ hộp phiên cũ** and is saved independently for each Sessions indicator instance and layout. Incomplete CVD history does not produce invented Fibo extremes.

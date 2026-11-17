@@ -1,3 +1,5 @@
+import { SESSION_DST_ZONES } from './session-dst.js';
+
 const STORAGE_KEY = 'mt5:texmoonbeam-sessions:v1';
 const GREEN = '#4caf50';
 const RED = '#f23645';
@@ -57,7 +59,7 @@ export const DEFAULTS = {
   }])),
   sessions: Object.fromEntries(SESSIONS.map(([id, , start, end, color]) => [id, {
     enabled: true, start, end, color, openColor: color, extend: false, showOpen: false,
-    fibonacci: true,
+    fibonacci: true, ...(SESSION_DST_ZONES[id] ? { autoDst: false } : {}),
   }])),
   custom: Array.from({length: 6}, (_, i) => {
     const [start, end] = customTimes[i % customTimes.length];
@@ -226,6 +228,11 @@ export function createSessionSettings(validateZone) {
     const path = ['sessions', id];
     checks(controls, path, [['enabled', 'Hiện hộp'], ['extend', 'Kéo dài sang phải'], ['showOpen', 'Giá mở phiên']]);
     checks(controls, path, [['fibonacci', 'Fibo phiên trước']]);
+    if (SESSION_DST_ZONES[id]) {
+      field(controls, [...path, 'autoDst'], 'Tự đổi giờ mùa đông/hè', 'checkbox');
+      const hint = element(controls, 'small', `Nhập giờ mùa hè. Mùa đông tự +1 giờ theo lịch ${title} khi dùng GMT/UTC cố định. Tính theo ngày từng nến, kể cả lịch sử; múi giờ địa phương có DST được tính bù.`);
+      hint.className = 'sessions-dst-hint';
+    }
     hours(controls, path);
     field(controls, [...path, 'color'], 'Màu hộp', 'color');
     field(controls, [...path, 'openColor'], 'Màu giá mở', 'color');

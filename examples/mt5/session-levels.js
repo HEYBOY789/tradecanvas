@@ -2,6 +2,7 @@
 import { priceToY, timeToX } from '@tradecanvas/core';
 import { indicatorSource, parseIndicatorSource } from '@tradecanvas/commons';
 import { FIBONACCI_LEVELS, PERIODS, SESSIONS } from './session-settings.js';
+import { seasonalSessionClock } from './session-dst.js';
 
 export const SESSIONS_INDICATOR_ID = 'texmoonbeam-sessions';
 export const SESSIONS_PANEL_ID = 'texmoonbeam-sessions-panel';
@@ -223,15 +224,17 @@ function drawSessions(ctx, viewport, bars, settings) {
   const fibonacci = [];
   for (const [id, title] of SESSIONS) {
     const options = settings.sessions[id];
+    const adjustedClock = options.autoDst ? seasonalSessionClock(bars, clock, id, settings.zone) : clock;
+    const adjustedTimelineClock = timeline === bars ? adjustedClock : options.autoDst ? seasonalSessionClock(timeline, timelineClock, id, settings.zone) : timelineClock;
     if (options.fibonacci && FIBONACCI_LEVELS.some(([level]) => settings.fibonacci.levels[level])) {
-      for (const previous of closedSessionRanges(bars, timeline, timelineClock, options, settings.fibonacci.history)) {
+      for (const previous of closedSessionRanges(bars, timeline, adjustedTimelineClock, options, settings.fibonacci.history)) {
         const prefix = { asia: 'PA', london: 'PLD', newYork: 'PNY' }[id];
         fibonacci.push(...fibonacciLines(previous, `${title}:${previous.start}`, settings, settings.fibonacci,
           { 0: `${prefix}L`, 100: `${prefix}H` }));
       }
     }
     if (!options.enabled) continue;
-    for (const range of sessionRanges(bars, clock, options, settings.history)) {
+    for (const range of sessionRanges(bars, adjustedClock, options, settings.history)) {
       const [start, end] = sessionEdges(range, viewport, options);
       if (end <= start) continue;
       const highY = priceToY(range.high, viewport);
