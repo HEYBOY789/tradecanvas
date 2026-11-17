@@ -34,8 +34,14 @@ export function createMt5Trading(getActiveWidget) {
   let state = null, timer, refreshing = null, busy = false, reviewOpen = false;
   let connected = false, message = '', armed = false, armedAccount = '', projection = null, syncingDrawing = false;
   const quickLots = new Map();
+  const bracketModes = new WeakMap();
   const adapters = new Set();
   const badge = element('span', 'MT5: đang kết nối…', { id: 'mt5-trading-status', role: 'status' });
+  const failure = element('div', null, { id: 'mt5-trading-error', role: 'alert' });
+  const failureText = element('span');
+  failure.hidden = true;
+  failure.append(failureText, button('Đóng', () => { failure.hidden = true; }));
+  document.querySelector('header').append(failure);
   const accountPanel = dialog('Tài khoản và lệnh MT5', false);
   accountPanel.id = 'mt5-account';
   const summary = element('p');
@@ -94,6 +100,9 @@ export function createMt5Trading(getActiveWidget) {
   function report(error) {
     message = error?.message || String(error);
     badge.textContent = `MT5: ${message}`;
+    // Quote polling must not erase a rejected edit before the user sees it.
+    failureText.textContent = message;
+    failure.hidden = false;
     render();
   }
 
@@ -102,7 +111,8 @@ export function createMt5Trading(getActiveWidget) {
     render();
   }
 
-  async function refresh() {
+  async function refresh(fresh = false) {
+    if (fresh && refreshing) await refreshing;
     if (refreshing) return refreshing;
     if (!key) return;
     refreshing = (async () => {
@@ -219,7 +229,8 @@ export function createMt5Trading(getActiveWidget) {
     if (!quote || !connected) { report(new Error('Chưa có dữ liệu giao dịch cho mã này.')); return; }
     if (!ticket.open(owner, { quantity: quickLots.get(symbol) || quote.min, ...initial })) return;
     projection?.destroy();
-    projection = orderProjection(owner, ticket.read, (field, value) => ticket.change(field, value, 'projection'), ticket.submit, ticket.close);
+    projection = orderProjection(owner, ticket.read, (field, value) => ticket.change(field, value, 'projection'), ticket.submit, ticket.close,
+      () => bracketModes.get(owner)?.active);
   }
 
   function editPosition(row) {
@@ -267,7 +278,7 @@ export function createMt5Trading(getActiveWidget) {
         await api('check', command);
         const result = await api('execute', command);
         message = result.partial ? 'MT5 khớp một phần. Kiểm tra khối lượng còn lại.' : 'MT5 đã tiếp nhận thao tác.';
-        await refresh(); return result;
+        await refresh(true); return result;
       } catch (error) {
         message = `${error.message} Kiểm tra Vị thế MT5 trước khi tạo yêu cầu mới.`;
         throw new Error(message);
@@ -299,7 +310,7 @@ export function createMt5Trading(getActiveWidget) {
         try {
           result = await api('execute', command);
           message = result.partial ? 'MT5 khớp một phần. Kiểm tra khối lượng còn lại trong Vị thế MT5.' : 'MT5 đã tiếp nhận thao tác.';
-          await refresh();
+          await refresh(true);
           modal.close();
         } catch (error) {
           // Never replay an execute call automatically: the terminal may already have accepted it.
@@ -320,6 +331,8 @@ export function createMt5Trading(getActiveWidget) {
     const listeners = new Map();
     let disposed = false;
     const chart = widget.getChart();
+    const mode = { active: false, account: state?.account.id, symbol: widget.getSymbol() };
+    bracketModes.set(widget, mode);
     const bar = element('div', null, { class: 'mt5-quick-trade', 'aria-label': 'Giao dịch nhanh MT5' });
     const quickSell = button('', () => quickMarket('sell'));
     const quickBuy = button('', () => quickMarket('buy'));
@@ -329,7 +342,18 @@ export function createMt5Trading(getActiveWidget) {
     const armedLabel = element('label', '1 nhấp');
     const armedInput = element('input', null, { type: 'checkbox', 'aria-label': 'One-click trading trên chart' });
     armedInput.addEventListener('change', () => setOneClick(armedInput.checked));
-    armedLabel.prepend(armedInput); bar.append(quickSell, lots, quickBuy, armedLabel);
+    const bracketButton = button('SL/TP', () => setBracketMode(!mode.active));
+    bracketButton.className = 'mt5-bracket-mode';
+    bracketButton.setAttribute('aria-label', 'Kéo SL/TP từ Entry');
+    bracketButton.title = 'Bật: kéo từ Entry để đặt/đổi SL hoặc TP. Tắt: kéo Entry dời cả bộ. Esc để tắt.';
+    const toolActive = () => Boolean(chart.getDrawingTool() || chart.isEraserMode() || chart.isZoomAreaMode());
+    function setBracketMode(value) { mode.active = value && !toolActive(); bracketButton.setAttribute('aria-pressed', String(mode.active)); }
+    function resetBracketMode() { setBracketMode(false); bracketButton.disabled = toolActive(); }
+    function escapeBracketMode(event) { if (event.key === 'Escape') resetBracketMode(); }
+    chart.on('drawingToolChange', resetBracketMode); chart.on('toolModeChange', resetBracketMode);
+    window.addEventListener('keydown', escapeBracketMode);
+    resetBracketMode();
+    armedLabel.prepend(armedInput); bar.append(quickSell, lots, quickBuy, armedLabel, bracketButton);
     widget.chartContainer.append(bar);
     const pendingStops = pendingStopHandles(widget, () => ({ orders: state?.orders.filter(row => row.symbol === widget.getSymbol()) || [],
       positions: state?.positions.filter(row => row.symbol === widget.getSymbol()) || [],
@@ -345,7 +369,7 @@ export function createMt5Trading(getActiveWidget) {
         if (row.takeProfit != null) intent.takeProfit = moved.takeProfit;
       } else intent[field] = moved[field];
       return review('modifyOrder', intent, row.symbol, accountId).catch(report);
-    }, () => busy || reviewOpen, activate);
+    }, () => busy || reviewOpen, activate, () => mode.active);
     lots.addEventListener('input', () => {
       const symbol = widget.getSymbol(); quickLots.set(symbol, Number(lots.value));
       try { sessionStorage.setItem(`mt5:quick-lots:${state?.account.id}:${symbol}`, lots.value); } catch { /* Keep the visible value. */ }
@@ -376,6 +400,9 @@ export function createMt5Trading(getActiveWidget) {
       publish() {
         if (disposed) return;
         const symbol = adapter.symbol(), q = state?.quotes[symbol];
+        if (mode.account !== state?.account.id || mode.symbol !== symbol) {
+          mode.account = state?.account.id; mode.symbol = symbol; resetBracketMode();
+        }
         if (q) {
           if (!quickLots.has(symbol)) {
             const saved = Number(sessionStorage.getItem(`mt5:quick-lots:${state.account.id}:${symbol}`));
@@ -415,6 +442,17 @@ export function createMt5Trading(getActiveWidget) {
     };
     chart.setTradingConfig({ positionLabel: '{side} {qty} lot · {entry}', lineButtons: { reverse: false, trailStop: false } });
     chart.connectExecution(adapter);
+    // The native trading handler precedes drawing placement in 2.x. Let the
+    // existing tool own this press, then restore trading before the next paint.
+    // Listen to mousedown too: the chart's mouse handler follows pointerdown.
+    function preserveToolPress(event) {
+      if (event.button != null && event.button !== 0) return;
+      if (!toolActive() && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) return;
+      chart.setTradingConfig({ enabled: false });
+      setTimeout(() => { if (!disposed) chart.setTradingConfig({ enabled: true }); }, 0);
+    }
+    widget.chartContainer.addEventListener('mousedown', preserveToolPress, true);
+    widget.chartContainer.addEventListener('touchstart', preserveToolPress, true);
     const onError = event => report(event.payload?.cause || event.payload?.message || 'Lỗi giao dịch MT5.');
     chart.on('executionError', onError);
     const drawingUpdate = event => {
@@ -430,6 +468,10 @@ export function createMt5Trading(getActiveWidget) {
     return () => {
       if (ticket.read().widget === widget) ticket.close(true);
       chart.off('executionError', onError); chart.off('drawingUpdate', drawingUpdate); chart.off('drawingRemove', drawingRemove); chart.off('resize', positionBar);
+      chart.off('drawingToolChange', resetBracketMode); chart.off('toolModeChange', resetBracketMode);
+      window.removeEventListener('keydown', escapeBracketMode); bracketModes.delete(widget);
+      widget.chartContainer.removeEventListener('mousedown', preserveToolPress, true);
+      widget.chartContainer.removeEventListener('touchstart', preserveToolPress, true);
       pendingStops.destroy(); bar.remove(); chart.disconnectExecution();
     };
   }

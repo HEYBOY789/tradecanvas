@@ -21,7 +21,7 @@ test('Sessions has its own pane, merges with CVD and survives layout reload', as
     await page.waitForFunction(() => window.testWidget?.getChart().getActiveIndicators()
       .some(item => item.id === 'mt5-cvd-candle' && window.testWidget.getChart().getIndicatorOutput(item.instanceId)?.values.size > 20));
     await page.getByRole('button', { name: 'Chỉ báo', exact: true }).click();
-    await page.locator('input:visible').first().fill('All-In-One Sessions');
+    await page.getByRole('searchbox').fill('All-In-One Sessions');
     await page.getByText('All-In-One Sessions · Ô riêng / CVD', { exact: true }).click();
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => window.testWidget.getChart().getActiveIndicators().some(item => item.id === 'texmoonbeam-sessions-panel'));

@@ -9,6 +9,8 @@ export function tradeGestures(widget, options) {
   const controls = new Map();
   let frame, timer, stopped = false, drag = null;
   const names = { price: 'Entry', stopPrice: 'Stop', stopLoss: 'SL', takeProfit: 'TP' };
+  const toolActive = () => Boolean(chart.getDrawingTool() || chart.isEraserMode() || chart.isZoomAreaMode());
+  const reserved = event => event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || toolActive();
   function geometry(event, quote) {
     const bounds = host.getBoundingClientRect(), viewport = chart.viewport.getState(), rect = viewport.chartRect;
     const x = event.clientX - bounds.left, y = event.clientY - bounds.top;
@@ -16,7 +18,7 @@ export function tradeGestures(widget, options) {
       price: roundPrice(yToPrice(Math.max(rect.y, Math.min(rect.y + rect.height, y)), viewport), quote) };
   }
   function begin(event, target, field) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || reserved(event)) return;
     event.preventDefault(); event.stopImmediatePropagation();
     if (options.disabled?.() || drag) return;
     options.activate?.();
@@ -25,13 +27,13 @@ export function tradeGestures(widget, options) {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     const current = options.read();
     drag = { target: { ...target, row: { ...target.row } }, field,
-      bracket: field === 'price' && event.shiftKey, pointer: event.pointerId,
+      bracket: field === 'price' && options.bracketMode?.(), pointer: event.pointerId,
       account: current.accountId, quote: current.quote, entry: target.row.price ?? target.row.entryPrice,
       price: target.row[field] ?? target.row.entryPrice, startY: event.clientY, moved: false, finished: false };
     host.setPointerCapture(event.pointerId);
   }
   function down(event) {
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || !host.contains(event.target)) return;
+    if (event.button !== 0 || reserved(event) || !host.contains(event.target)) return;
     const owned = [...controls.values()].find(value => value.tag === event.target || value.tag.contains(event.target));
     if (owned) { begin(event, owned.target, owned.field); return; }
     if (event.target.closest('button,input,select,textarea')) return;
@@ -39,7 +41,7 @@ export function tradeGestures(widget, options) {
     const point = geometry(event, current.quote); if (!point.inside) return;
     if (!options.draft && current.blockedPrices?.some(price => price > 0 && Math.abs(priceToY(price, point.viewport) - point.y) <= 7)) return;
     const hit = current.targets.flatMap(target => {
-      const fields = [...(target.canMoveEntry || event.shiftKey ? ['price'] : []),
+      const fields = [...(target.canMoveEntry || options.bracketMode?.() ? ['price'] : []),
         ...(target.row.type === 'stopLimit' ? ['stopPrice'] : []), 'stopLoss', 'takeProfit'];
       return fields.flatMap(field => {
         const price = field === 'price' ? target.row.price ?? target.row.entryPrice : target.row[field];
@@ -114,7 +116,7 @@ export function tradeGestures(widget, options) {
     if (!current.targets.length && !controls.size && !options.draft) { layer.hidden = true; timer = setTimeout(render, 100); return; }
     const viewport = chart.viewport.getState(), rect = viewport.chartRect;
     Object.assign(layer.style, { left: `${rect.x}px`, top: `${rect.y}px`, width: `${rect.width}px`, height: `${rect.height}px` });
-    layer.hidden = !current.quote;
+    layer.hidden = !current.quote || toolActive();
     const proposed = preview(), keys = new Set();
     if (proposed && drag.target.kind !== 'draft') options.preview?.(drag.target, proposed.row);
     if (current.quote) for (const target of current.targets) {

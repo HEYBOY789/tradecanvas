@@ -15,9 +15,10 @@ async function drag(page, locator, dy) {
   await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2 + dy, { steps: 5 }); await page.mouse.up();
 }
 
-async function shiftDrag(page, locator, dy) {
-  await page.keyboard.down('Shift');
-  try { await drag(page, locator, dy); } finally { await page.keyboard.up('Shift'); }
+async function bracketDrag(page, locator, dy) {
+  const mode = page.getByRole('button', { name: 'Kéo SL/TP từ Entry', exact: true });
+  await mode.click();
+  try { await drag(page, locator, dy); } finally { await mode.click(); }
 }
 
 async function executed(page, action) {
@@ -26,7 +27,7 @@ async function executed(page, action) {
   await page.waitForFunction(() => !document.querySelector('[aria-label="Mua nhanh MT5"]').disabled);
 }
 
-test('Shift creates or replaces SL/TP from Entry, normal Entry drag preserves the bracket, and stops drag independently', async () => {
+test('SL/TP mode creates or replaces exits from Entry, normal Entry drag preserves the bracket, and stops drag independently', async () => {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
     const { page, fixture } = await tradingPage(browser);
@@ -37,16 +38,16 @@ test('Shift creates or replaces SL/TP from Entry, normal Entry drag preserves th
     await ticket.getByRole('tab', { name: 'Limit', exact: true }).click(); await ticket.locator('[name=price]').fill('3760');
     await view(page, 3700, 3860);
     const entry = page.getByRole('button', { name: 'Kéo Entry lệnh nháp', exact: true });
-    await shiftDrag(page, entry, 35);
+    await bracketDrag(page, entry, 35);
     assert.ok(Number(await ticket.locator('[name=stopLoss]').inputValue()) < 3760);
-    await shiftDrag(page, entry, -55);
+    await bracketDrag(page, entry, -55);
     assert.ok(Number(await ticket.locator('[name=takeProfit]').inputValue()) > 3760);
     const readDraft = () => page.evaluate(() => Object.fromEntries(['price', 'stopLoss', 'takeProfit'].map(key => [key, Number(document.querySelector(`#mt5-ticket [name=${key}]`).value)])));
     const before = await readDraft();
     await drag(page, entry, -20);
     const moved = await readDraft(), delta = moved.price - before.price;
     assert.ok(delta > 0, JSON.stringify({ before, moved })); assert.ok(Math.abs(moved.stopLoss - before.stopLoss - delta) < .002); assert.ok(Math.abs(moved.takeProfit - before.takeProfit - delta) < .002);
-    await shiftDrag(page, entry, 20);
+    await bracketDrag(page, entry, 20);
     const replaced = await readDraft();
     assert.notEqual(replaced.stopLoss, moved.stopLoss); assert.equal(replaced.price, moved.price); assert.equal(replaced.takeProfit, moved.takeProfit);
     await drag(page, page.getByRole('button', { name: 'Kéo SL lệnh nháp', exact: true }), 10);
@@ -54,14 +55,14 @@ test('Shift creates or replaces SL/TP from Entry, normal Entry drag preserves th
     assert.equal(fixture.executed.length, 0);
     await page.getByRole('button', { name: 'Đóng phiếu đặt lệnh' }).click();
     await view(page, 3700, 3860);
-    async function liveEntry(dy, shift) {
+    async function liveEntry(dy, bracket) {
       const at = await page.evaluate(async () => {
         const { priceToY } = await import('/vendor/core/index.js'); const w = testGrid.getWidget(0), chart = w.getChart(), v = chart.viewport.getState(), r = w.chartContainer.getBoundingClientRect();
         return { x: r.left + v.chartRect.x + v.chartRect.width / 2, y: r.top + priceToY(chart.getOrders()[0].price, v) };
       });
-      if (shift) await page.keyboard.down('Shift');
-      try { await page.mouse.move(at.x, at.y); await page.mouse.down(); await page.mouse.move(at.x, at.y + dy, { steps: 6 }); await page.mouse.up(); }
-      finally { if (shift) await page.keyboard.up('Shift'); }
+      const mode = page.getByRole('button', { name: 'Kéo SL/TP từ Entry', exact: true });
+      if ((await mode.getAttribute('aria-pressed') === 'true') !== bracket) await mode.click();
+      await page.mouse.move(at.x, at.y); await page.mouse.down(); await page.mouse.move(at.x, at.y + dy, { steps: 6 }); await page.mouse.up();
     }
     await liveEntry(30, true);
     await page.locator('#mt5-review').waitFor(); assert.equal(fixture.executed.length, 0);
