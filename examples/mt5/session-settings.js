@@ -1,4 +1,4 @@
-import { SESSION_SEASONS, withSessionSeasons } from './session-seasons.js';
+import { SESSION_SEASON_ZONES, withSessionSeasons } from './session-seasons.js';
 
 const STORAGE_KEY = 'mt5:texmoonbeam-sessions:v1';
 const GREEN = '#4caf50';
@@ -172,9 +172,6 @@ export function createSessionSettings(validateZone) {
   }
 
   function seasonalHours(parent, path) {
-    const choice = field(parent, [...path, 'season'], 'Mùa áp dụng', 'select', SESSION_SEASONS);
-    choice.setAttribute('aria-label', 'Mùa áp dụng');
-    choice.parentElement.className = 'sessions-season-choice';
     const pairs = element(parent, 'div');
     pairs.className = 'sessions-season-hours';
     for (const [title, suffix, start, end] of [
@@ -242,14 +239,19 @@ export function createSessionSettings(validateZone) {
   checks(sessions, [], [['history', 'Giữ hộp phiên cũ']]);
   lineStyle(sessions, [], 'borderWidth', 'borderStyle', 0);
   field(sessions, ['transparency'], 'Độ trong nền (%)', 'number', { min: 0, max: 100, required: true });
-  const seasonHint = element(sessions, 'small', 'Giờ theo Múi giờ phiên. Chọn mùa thủ công cho từng phiên; mùa đã chọn áp dụng cho cả lịch sử.');
+  const seasonHint = element(sessions, 'small', 'Giờ theo Múi giờ phiên. London và New York tự dùng khung hè/đông theo lịch từng thị trường, tính theo ngày của từng nến, kể cả lịch sử.');
   seasonHint.className = 'sessions-season-hint';
   for (const [id, title] of SESSIONS) {
     const controls = group(sessions, title);
     const path = ['sessions', id];
     checks(controls, path, [['enabled', 'Hiện hộp'], ['extend', 'Kéo dài sang phải'], ['showOpen', 'Giá mở phiên']]);
     checks(controls, path, [['fibonacci', 'Fibo phiên trước']]);
-    seasonalHours(controls, path);
+    if (SESSION_SEASON_ZONES[id]) seasonalHours(controls, path);
+    else {
+      hours(controls, path);
+      const hint = element(controls, 'small', 'Phiên Á (Tokyo) dùng cùng khung giờ quanh năm.');
+      hint.className = 'sessions-season-hint';
+    }
     field(controls, [...path, 'color'], 'Màu hộp', 'color');
     field(controls, [...path, 'openColor'], 'Màu giá mở', 'color');
   }

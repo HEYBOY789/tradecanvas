@@ -14,7 +14,7 @@ test('Fibonacci is drawn inside the closed session with centered outlined number
   // A stale layout's former extension flag must not extend Fibonacci.
   settings.fibonacci.extend = true;
   for (const options of Object.values(settings.sessions)) Object.assign(options, { enabled: false, fibonacci: false });
-  Object.assign(settings.sessions.london, { start: '08:00', end: '10:00', fibonacci: true });
+  Object.assign(settings.sessions.london, { start: '08:00', end: '10:00', winterStart: '08:00', winterEnd: '10:00', fibonacci: true });
   const time = hour => Date.UTC(2026, 10, 16, hour);
   const bars = [7, 8, 9, 10].map(hour => ({ time: time(hour), open: 110, high: 150, low: 100, close: 120 }));
   const active = { id: 'texmoonbeam-sessions', instanceId: 'sessions', visible: true, shown: true };
@@ -70,7 +70,7 @@ test('Fibonacci is drawn inside the closed session with centered outlined number
   assert.equal(strokes.length, 4, 'two levels are retained on each completed session');
   assert.deepEqual(strokes.map(line => line.path[0][0]), [9, 9, 49, 49]);
   assert.deepEqual(texts.filter(text => text.kind === 'fill').map(text => text.x), [19, 19, 59, 59]);
-  for (const options of Object.values(settings.sessions)) Object.assign(options, { start: '08:00', end: '10:00', enabled: false, fibonacci: true });
+  for (const options of Object.values(settings.sessions)) Object.assign(options, { start: '08:00', end: '10:00', winterStart: '08:00', winterEnd: '10:00', enabled: false, fibonacci: true });
   settings.fibonacci.levels = { p000: true, p100: true }; settings.fibonacci.history = false;
   config.params.sessionSettings = JSON.stringify(settings); strokes.length = 0; texts.length = 0;
   plugin.render(ctx, plugin.calculate(bars, config), { ...viewport, visibleRange: { from: 0, to: 7 }, priceRange: { min: 80, max: 170 } });

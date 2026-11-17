@@ -2,7 +2,7 @@
 import { priceToY, timeToX } from '@tradecanvas/core';
 import { indicatorSource, parseIndicatorSource } from '@tradecanvas/commons';
 import { FIBONACCI_LEVELS, PERIODS, SESSIONS } from './session-settings.js';
-import { sessionHours } from './session-seasons.js';
+import { sessionSchedule } from './session-seasons.js';
 
 export const SESSIONS_INDICATOR_ID = 'texmoonbeam-sessions';
 export const SESSIONS_PANEL_ID = 'texmoonbeam-sessions-panel';
@@ -44,6 +44,15 @@ function minutes(time) {
   return hours * 60 + mins;
 }
 
+function sessionBoundaries(options, sessionId) {
+  const schedule = sessionSchedule(sessionId, options), boundaries = new Map();
+  return time => {
+    const selected = schedule(time);
+    if (!boundaries.has(selected)) boundaries.set(selected, { start: minutes(selected.start), end: minutes(selected.end) });
+    return boundaries.get(selected);
+  };
+}
+
 function sessionDay({ day, minute }, start, end, days) {
   if (start < end && (minute < start || minute >= end)) return null;
   if (start > end && minute < start && minute >= end) return null;
@@ -58,20 +67,20 @@ function sessionDay({ day, minute }, start, end, days) {
   return tradingDay;
 }
 
-export function sessionRanges(bars, clock, options, history) {
-  const start = minutes(options.start);
-  const end = minutes(options.end);
+export function sessionRanges(bars, clock, options, history, sessionId) {
+  const boundaries = sessionBoundaries(options, sessionId);
   const days = options.days ?? EVERY_DAY;
   const ranges = [];
   let current;
   let lastDay;
   for (let i = 0; i < bars.length; i++) {
+    const { start, end } = boundaries(bars[i].time);
     const key = sessionDay(clock[i], start, end, days);
     if (key === null) continue;
     const bar = bars[i];
-    if (!current || key !== lastDay) {
+    if (!current || key !== lastDay || current.startMinute !== start || current.endMinute !== end) {
       current = { start: bar.time, end: bar.time, open: bar.open, high: bar.high, low: bar.low,
-        day: key, firstIndex: i, lastIndex: i };
+        day: key, startMinute: start, endMinute: end, firstIndex: i, lastIndex: i };
       if (!history || options.extend) ranges.length = 0;
       ranges.push(current);
       lastDay = key;
@@ -97,19 +106,19 @@ export function fibonacciLines(range, prefix, settings, options = settings.fibon
   }));
 }
 
-export function closedSessionRanges(bars, timeline, clock, options, history = false) {
+export function closedSessionRanges(bars, timeline, clock, options, history = false, sessionId) {
   if (!timeline.length) return [];
-  const start = minutes(options.start);
-  const end = minutes(options.end);
+  const boundaries = sessionBoundaries(options, sessionId);
+  const { start, end } = boundaries(timeline.at(-1).time);
   const days = options.days ?? EVERY_DAY;
   const activeDay = sessionDay(clock.at(-1), start, end, days);
-  const ranges = sessionRanges(timeline, clock, { ...options, extend: false }, true);
-  const completed = ranges.filter(item => item.day !== activeDay);
+  const ranges = sessionRanges(timeline, clock, { ...options, extend: false }, true, sessionId);
+  const completed = ranges.filter(item => item.day !== activeDay || item.startMinute !== start || item.endMinute !== end);
   const candidates = history ? completed : completed.slice(-1);
   const source = new Map(bars.map(bar => [bar.time, bar]));
   return candidates.flatMap(range => {
     const following = timeline[range.lastIndex + 1];
-    if (!following || (range.firstIndex === 0 && clock[0].minute !== start)) return [];
+    if (!following || (range.firstIndex === 0 && clock[0].minute !== boundaries(range.start).start)) return [];
     const members = timeline.slice(range.firstIndex, range.lastIndex + 1).map(bar => source.get(bar.time));
     // A partial history page or an unfinished CVD backfill cannot establish session extremes.
     if (members.some(bar => !bar)) return [];
@@ -118,8 +127,8 @@ export function closedSessionRanges(bars, timeline, clock, options, history = fa
   });
 }
 
-export function previousSessionRange(bars, timeline, clock, options) {
-  return closedSessionRanges(bars, timeline, clock, options).at(-1) ?? null;
+export function previousSessionRange(bars, timeline, clock, options, sessionId) {
+  return closedSessionRanges(bars, timeline, clock, options, false, sessionId).at(-1) ?? null;
 }
 
 export function periodLines(periods, settings) {
@@ -223,16 +232,16 @@ function drawSessions(ctx, viewport, bars, settings) {
   const timelineClock = timeline === bars ? clock : timeline.map(bar => toLocal(bar.time));
   const fibonacci = [];
   for (const [id, title] of SESSIONS) {
-    const options = sessionHours(settings.sessions[id]);
+    const options = settings.sessions[id];
     if (options.fibonacci && FIBONACCI_LEVELS.some(([level]) => settings.fibonacci.levels[level])) {
-      for (const previous of closedSessionRanges(bars, timeline, timelineClock, options, settings.fibonacci.history)) {
+      for (const previous of closedSessionRanges(bars, timeline, timelineClock, options, settings.fibonacci.history, id)) {
         const prefix = { asia: 'PA', london: 'PLD', newYork: 'PNY' }[id];
         fibonacci.push(...fibonacciLines(previous, `${title}:${previous.start}`, settings, settings.fibonacci,
           { 0: `${prefix}L`, 100: `${prefix}H` }));
       }
     }
     if (!options.enabled) continue;
-    for (const range of sessionRanges(bars, clock, options, settings.history)) {
+    for (const range of sessionRanges(bars, clock, options, settings.history, id)) {
       const [start, end] = sessionEdges(range, viewport, options);
       if (end <= start) continue;
       const highY = priceToY(range.high, viewport);
