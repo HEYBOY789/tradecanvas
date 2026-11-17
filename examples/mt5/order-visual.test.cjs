@@ -15,6 +15,7 @@ test('order panel fits phone, laptop and wide layouts in light/dark themes and t
     await panel.getByRole('switch', { name: 'Bật Take Profit', exact: true }).check();
     await panel.locator('[name=price]').fill('3800');
     await panel.locator('[name=stopLoss]').fill('3790'); await panel.locator('[name=takeProfit]').fill('3820');
+    await panel.locator('.order-ticket-receipt').getByText('0,001 USD', { exact: true }).waitFor();
     const directory = process.env.TRADECANVAS_VISUALS || 'artifacts/order-panel'; await mkdir(directory, { recursive: true });
     for (const width of [390, 1366, 1920]) for (const theme of ['dark', 'light']) for (const look of ['print', 'studio', 'terminal']) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 1050 });

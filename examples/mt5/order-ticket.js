@@ -205,7 +205,7 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
     tifGroup.hidden = draft.type === 'market'; tif.value = draft.timeInForce;
     for (const option of tif.options) option.disabled = q.expirationMode != null && !(q.expirationMode & (option.value === 'gtc' ? 1 : 2));
     for (const [id, value] of amounts) value.textContent = id === 'ratio' ? estimate?.ratio == null ? '—' : `${format(estimate.ratio)} : 1`
-      : id === 'leverage' ? `1:${format(a.leverage, 0)}` : estimate?.[id] == null ? '—' : `${format(estimate[id])} ${a.currency}`;
+      : id === 'leverage' ? `1:${format(a.leverage, 0)}` : estimate?.[id] == null ? '—' : `${format(estimate[id], id === 'tickValue' ? 6 : 2)} ${a.currency}`;
     clickInput.checked = oneClick();
     permission.textContent = initialAccount !== a.id ? 'Tài khoản đã thay đổi. Mở lại phiếu đặt lệnh.' : a.reason || '';
     issue.textContent = problem;
