@@ -30,14 +30,14 @@ test('each Sessions instance keeps its own timezone, times and colors across lay
         await dialog.getByLabel('Múi giờ phiên').selectOption(zone);
         const asia = dialog.locator('details').filter({ has: page.locator('summary', { hasText: /^Châu Á$/ }) }).last();
         if (!await asia.evaluate(element => element.open)) await asia.locator('summary').click();
-        await asia.getByLabel('Bắt đầu', { exact: true }).fill(start);
+        await asia.getByLabel('Bắt đầu mùa hè', { exact: true }).fill(start);
         await asia.getByLabel('Màu hộp', { exact: true }).fill(color);
         await dialog.getByRole('button', { name: 'Áp dụng' }).click();
         return;
       }
       const asia = dialog.locator('details').filter({ has: page.locator('summary', { hasText: /^Châu Á$/ }) }).last();
       const result = { zone: await dialog.getByLabel('Múi giờ phiên').inputValue(),
-        start: await asia.getByLabel('Bắt đầu', { exact: true }).inputValue(),
+        start: await asia.getByLabel('Bắt đầu mùa hè', { exact: true }).inputValue(),
         color: await asia.getByLabel('Màu hộp', { exact: true }).inputValue() };
       await dialog.getByRole('button', { name: 'Hủy' }).click();
       return result;

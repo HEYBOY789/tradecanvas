@@ -1,5 +1,6 @@
-export const SESSION_SEASON_ZONES = { london: 'Europe/London', newYork: 'America/New_York' };
-const WINTER_OFFSET_MINUTES = { asia: 0, london: 60, newYork: 60 };
+// The custom Asian range follows London so it can end at the European open.
+export const SESSION_SEASON_ZONES = { asia: 'Europe/London', london: 'Europe/London', newYork: 'America/New_York' };
+const WINTER_OFFSET_MINUTES = { asia: { start: 0, end: 60 }, london: { start: 60, end: 60 }, newYork: { start: 60, end: 60 } };
 const DAY = 86400000, MINUTE = 60000;
 const formatters = new Map(), days = new Map(), summerOffsets = new Map();
 const validTime = value => typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
@@ -16,11 +17,11 @@ export function withSessionSeasons(id, snapshot, defaults) {
   delete options.season;
   const start = validTime(snapshot?.start) ? snapshot.start : defaults.start;
   const end = validTime(snapshot?.end) ? snapshot.end : defaults.end;
-  const offset = WINTER_OFFSET_MINUTES[id] ?? 0;
+  const offset = WINTER_OFFSET_MINUTES[id] ?? { start: 0, end: 0 };
   return { ...options, start, end,
     // Seed once from the saved hours; either pair can then be edited independently.
-    winterStart: validTime(snapshot?.winterStart) ? snapshot.winterStart : suggestedWinter(start, offset),
-    winterEnd: validTime(snapshot?.winterEnd) ? snapshot.winterEnd : suggestedWinter(end, offset),
+    winterStart: validTime(snapshot?.winterStart) ? snapshot.winterStart : suggestedWinter(start, offset.start),
+    winterEnd: validTime(snapshot?.winterEnd) ? snapshot.winterEnd : suggestedWinter(end, offset.end),
   };
 }
 

@@ -31,30 +31,19 @@ test('automatic seasonal pairs persist independently across instances, layouts a
       const c = testGrid.getWidget(0).getChart(), row = c.getActiveIndicators().find(row => row.id === id);
       return JSON.parse(c.getIndicatorConfig(row.instanceId).params.sessionSettings);
     }, id);
-    const values = async row => {
-      if (await row.locator('input[type="time"]').count() === 2) return {
-        start: await row.getByLabel('Bắt đầu', { exact: true }).inputValue(),
-        end: await row.getByLabel('Kết thúc', { exact: true }).inputValue(),
-      };
-      return {
-        start: await row.getByLabel('Bắt đầu mùa hè', { exact: true }).inputValue(),
-        end: await row.getByLabel('Kết thúc mùa hè', { exact: true }).inputValue(),
-        winterStart: await row.getByLabel('Bắt đầu mùa đông', { exact: true }).inputValue(),
-        winterEnd: await row.getByLabel('Kết thúc mùa đông', { exact: true }).inputValue(),
-      };
-    };
+    const values = async row => ({
+      start: await row.getByLabel('Bắt đầu mùa hè', { exact: true }).inputValue(),
+      end: await row.getByLabel('Kết thúc mùa hè', { exact: true }).inputValue(),
+      winterStart: await row.getByLabel('Bắt đầu mùa đông', { exact: true }).inputValue(),
+      winterEnd: await row.getByLabel('Kết thúc mùa đông', { exact: true }).inputValue(),
+    });
     async function fill(row, value) {
-      if (await row.locator('input[type="time"]').count() === 2) {
-        await row.getByLabel('Bắt đầu', { exact: true }).fill(value.start);
-        await row.getByLabel('Kết thúc', { exact: true }).fill(value.end);
-        return;
-      }
       for (const [key, label] of [['start', 'Bắt đầu mùa hè'], ['end', 'Kết thúc mùa hè'], ['winterStart', 'Bắt đầu mùa đông'], ['winterEnd', 'Kết thúc mùa đông']]) {
         await row.getByLabel(label, { exact: true }).fill(value[key]);
       }
     }
     const expected = {
-      asia: { start: '23:30', end: '08:00' },
+      asia: { start: '23:30', end: '07:15', winterStart: '23:45', winterEnd: '08:30' },
       london: { start: '07:15', end: '16:45', winterStart: '08:10', winterEnd: '17:20' },
       newYork: { start: '12:00', end: '21:00', winterStart: '13:30', winterEnd: '22:45' },
     };
@@ -65,13 +54,17 @@ test('automatic seasonal pairs persist independently across instances, layouts a
     editor = await open(panel);
     assert.equal((await values(editor.london)).start, '08:00');
     const panelHours = { start: '06:15', end: '15:30', winterStart: '09:20', winterEnd: '19:40' };
+    const panelAsiaHours = { start: '21:45', end: '06:45', winterStart: '22:15', winterEnd: '08:15' };
     await fill(editor.london, panelHours);
+    await fill(editor.asia, panelAsiaHours);
     await editor.dialog.getByRole('button', { name: 'Áp dụng', exact: true }).click();
     editor = await open(main);
     for (const [key, value] of Object.entries(expected)) assert.deepEqual(await values(editor[key]), value);
     await editor.london.getByLabel('Bắt đầu mùa đông', { exact: true }).fill('05:00');
+    await editor.asia.getByLabel('Kết thúc mùa đông', { exact: true }).fill('06:30');
     await editor.dialog.getByRole('button', { name: 'Hủy', exact: true }).click();
     assert.equal((await read(main)).sessions.london.winterStart, '08:10', 'cancel discards the edited pair');
+    assert.equal((await read(main)).sessions.asia.winterEnd, '08:30');
     const saved = await page.evaluate(() => testGrid.getLayoutSession().saveAs('Automatic seasonal Sessions'));
     editor = await open(main);
     await editor.london.getByLabel('Bắt đầu mùa đông', { exact: true }).fill('06:00');
@@ -84,6 +77,7 @@ test('automatic seasonal pairs persist independently across instances, layouts a
     for (const [key, value] of Object.entries(expected)) assert.deepEqual(await values(editor[key]), value);
     await editor.dialog.getByRole('button', { name: 'Hủy', exact: true }).click();
     editor = await open(panel); assert.deepEqual(await values(editor.london), panelHours);
+    assert.deepEqual(await values(editor.asia), panelAsiaHours);
     await editor.dialog.getByRole('button', { name: 'Hủy', exact: true }).click();
     await page.evaluate(async () => {
       const w = testGrid.getWidget(0), legacy = w.layouts.captureLayout();
@@ -101,7 +95,7 @@ test('automatic seasonal pairs persist independently across instances, layouts a
     });
     editor = await open(main);
     assert.deepEqual(await values(editor.london), { start: '14:15', end: '17:45', winterStart: '15:15', winterEnd: '18:45' });
-    assert.deepEqual(await values(editor.asia), { start: '23:30', end: '08:00' });
+    assert.deepEqual(await values(editor.asia), { start: '23:30', end: '08:00', winterStart: '23:30', winterEnd: '09:00' });
     await editor.london.getByLabel('Bắt đầu mùa hè', { exact: true }).fill('11:00');
     await editor.dialog.getByRole('button', { name: 'Áp dụng', exact: true }).click();
     const migrated = (await read(main)).sessions.london;
@@ -114,11 +108,11 @@ test('automatic seasonal pairs persist independently across instances, layouts a
   } finally { await browser.close(); }
 });
 
-test('both seasonal hour groups fit phone, laptop and wide charts across themes and looks', async () => {
+test('Asian seasonal hour groups fit phone, laptop and wide charts across themes and looks', async () => {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
     const { page, fixture } = await tradingPage(browser);
-    await mkdir('artifacts/sessions-seasons', { recursive: true });
+    await mkdir('artifacts/sessions-asia-seasons', { recursive: true });
     for (const width of [390, 1366, 1920]) for (const theme of ['dark', 'light']) for (const look of ['print', 'studio', 'terminal']) {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
       await page.evaluate(({ theme, look }) => { testGrid.setTheme(theme); testGrid.setUI(look); }, { theme, look });
@@ -126,15 +120,15 @@ test('both seasonal hour groups fit phone, laptop and wide charts across themes 
       await page.locator(`.tcw-ind-legend-row[data-instance="${id}"] .tcw-ind-legend-name`).click();
       const dialog = page.getByRole('dialog', { name: 'All-In-One Sessions', exact: true }); await dialog.waitFor();
       await dialog.locator('details').evaluateAll(rows => rows.forEach(row => {
-        row.open = ['Phiên giao dịch', 'London'].includes(row.querySelector(':scope > summary').textContent);
+        row.open = ['Phiên giao dịch', 'Châu Á'].includes(row.querySelector(':scope > summary').textContent);
       }));
-      const london = dialog.locator('details').filter({ has: page.locator('summary', { hasText: /^London$/ }) }).last();
-      assert.equal(await london.getByLabel('Mùa áp dụng', { exact: true }).count(), 0);
-      await london.scrollIntoViewIfNeeded();
+      const asia = dialog.locator('details').filter({ has: page.locator('summary', { hasText: /^Châu Á$/ }) }).last();
+      assert.equal(await asia.getByLabel('Mùa áp dụng', { exact: true }).count(), 0);
+      await asia.scrollIntoViewIfNeeded();
       const metrics = await dialog.evaluate(root => ({ client: root.clientWidth, scroll: root.scrollWidth }));
       assert.ok(metrics.scroll <= metrics.client + 1, `${width} ${theme} ${look}: no horizontal overflow`);
-      assert.equal(await london.locator('input[type="time"]').count(), 4);
-      await page.screenshot({ path: `artifacts/sessions-seasons/${width}-${theme}-${look}.png` });
+      assert.equal(await asia.locator('input[type="time"]').count(), 4);
+      await page.screenshot({ path: `artifacts/sessions-asia-seasons/${width}-${theme}-${look}.png` });
       await dialog.getByRole('button', { name: 'Hủy', exact: true }).click();
     }
     assert.equal(fixture.executed.length, 0); assert.deepEqual(fixture.errors, []);

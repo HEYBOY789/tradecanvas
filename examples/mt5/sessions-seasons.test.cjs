@@ -13,7 +13,7 @@ test('legacy hours seed independent seasonal pairs and discard the old controls'
     assert.equal('autoDst' in result, false);
   }
   const asia = withSessionSeasons('asia', legacy, defaults);
-  assert.equal(asia.winterStart, '23:15'); assert.equal(asia.winterEnd, '01:45');
+  assert.equal(asia.winterStart, '23:15'); assert.equal(asia.winterEnd, '02:45');
   assert.equal(legacy.autoDst, false, 'migration leaves its input intact');
   const invalid = withSessionSeasons('london', { start: '25:00', end: '', winterStart: 'oops', season: 'automatic' }, defaults);
   assert.equal(invalid.start, '08:00'); assert.equal(invalid.end, '17:00');
@@ -24,7 +24,7 @@ test('legacy hours seed independent seasonal pairs and discard the old controls'
 test('regional calendars choose editable hours, including weeks when UK and US seasons differ', async () => {
   const { withSessionSeasons, sessionSchedule } = await import('./session-seasons.js');
   const summer = { start: '07:15', end: '16:45' };
-  for (const id of ['london', 'newYork']) {
+  for (const id of ['asia', 'london', 'newYork']) {
     const snapshot = { ...summer, season: 'Mùa đông', winterStart: '22:30', winterEnd: '03:15' };
     const options = withSessionSeasons(id, snapshot, summer);
     const schedule = sessionSchedule(id, options);
@@ -33,13 +33,12 @@ test('regional calendars choose editable hours, including weeks when UK and US s
     assert.deepEqual([options.start, options.end], ['07:15', '16:45']);
     assert.deepEqual([summerHours.start, summerHours.end], ['07:15', '16:45']);
     for (const date of ['2026-03-16T12:00Z', '2026-10-26T12:00Z']) {
-      assert.equal(schedule(Date.parse(date)).start, id === 'london' ? '22:30' : '07:15');
+      assert.equal(schedule(Date.parse(date)).start, id === 'newYork' ? '07:15' : '22:30');
     }
     assert.equal(schedule(Date.parse('2006-03-20T12:00Z')).start, '22:30', 'historical US rules predate the 2007 change');
     const changed = withSessionSeasons(id, { ...options, start: '05:00', end: '11:00' }, summer);
     assert.deepEqual([changed.winterStart, changed.winterEnd], ['22:30', '03:15']);
   }
-  assert.equal(sessionSchedule('asia', summer)(Date.parse('2026-01-15T12:00Z')), summer, 'Tokyo retains its fixed hours');
 });
 
 test('automatic overnight ranges and CVD closure use the same seasonal pair', async () => {
@@ -94,6 +93,8 @@ test('season switches at each regional transition rather than browser midnight',
   const { sessionSchedule } = await import('./session-seasons.js');
   const options = { start: '07:00', end: '16:00', winterStart: '08:30', winterEnd: '18:15' };
   for (const [id, date, before, after] of [
+    ['asia', '2026-03-29T01:00:00Z', '08:30', '07:00'],
+    ['asia', '2026-10-25T01:00:00Z', '07:00', '08:30'],
     ['london', '2026-03-29T01:00:00Z', '08:30', '07:00'],
     ['london', '2026-10-25T01:00:00Z', '07:00', '08:30'],
     ['newYork', '2026-03-08T07:00:00Z', '08:30', '07:00'],
@@ -101,6 +102,25 @@ test('season switches at each regional transition rather than browser midnight',
   ]) {
     const schedule = sessionSchedule(id, options), time = Date.parse(date);
     assert.equal(schedule(time - 1).start, before); assert.equal(schedule(time).start, after);
+  }
+});
+
+test('Asia can close at the European open in both seasons, with matching CVD and Fibonacci membership', async () => {
+  const { sessionClock, sessionRanges, closedSessionRanges } = await import('./session-levels.js');
+  const asia = { start: '22:00', end: '07:00', winterStart: '22:00', winterEnd: '08:00' };
+  const london = { start: '07:00', end: '16:00', winterStart: '08:00', winterEnd: '17:00' };
+  for (const [month, day, endHour] of [[0, 16, 8], [6, 16, 7], [2, 16, 8], [9, 26, 8]]) {
+    const start = Date.UTC(2026, month, day - 1, 22);
+    const bars = Array.from({ length: 14 }, (_, i) => ({ time: start + i * 3600000, open: 100, high: 110 + i, low: 90 - i }));
+    const clock = bars.map(bar => sessionClock('GMT')(bar.time));
+    const range = sessionRanges(bars, clock, asia, true, 'asia')[0];
+    const europe = sessionRanges(bars, clock, london, true, 'london')[0];
+    assert.equal(range.end + 3600000, Date.UTC(2026, month, day, endHour));
+    assert.equal(range.end + 3600000, europe.start, 'the Asian close follows London rather than the earlier US switch');
+    const cvd = bars.map(bar => ({ ...bar, high: bar.high - 300, low: bar.low - 300 }));
+    assert.deepEqual(closedSessionRanges(cvd, bars, clock, asia, true, 'asia'), [{
+      start: range.start, end: range.end, high: range.high - 300, low: range.low - 300,
+    }]);
   }
 });
 
