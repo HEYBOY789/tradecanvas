@@ -106,6 +106,8 @@
 .mt5-live-entry > .mt5-projection-tag { visibility: hidden; }
 .mt5-native-level { border-top-color: transparent; }
 .mt5-native-level > .mt5-projection-tag { opacity: 0; pointer-events: none; }
+.mt5-order-tooltip { position: absolute; z-index: 6; pointer-events: none; max-width: min(350px, calc(100% - 8px)); padding: 8px 10px; border: 1px solid var(--tcw-border, #363a45); border-radius: 5px; background: var(--tcw-bg, #131722); color: var(--tcw-text, #d1d4dc); box-shadow: 0 3px 12px #0003; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.6 'Segoe UI', sans-serif; }
+.mt5-order-tooltip[hidden] { display: none !important; }
 .mt5-expiry-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .mt5-expiry-fields label { display: grid; gap: 4px; }
 .mt5-expiry-fields input, .mt5-expiry-fields select { min-width: 0; width: 100%; padding: 7px; color: inherit; background: transparent; border: 1px solid #787b86; border-radius: 4px; font: inherit; }

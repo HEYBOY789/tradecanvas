@@ -12,9 +12,9 @@ export function tradeGestures(widget, options) {
   const names = { price: 'Entry', stopPrice: 'Stop', stopLoss: 'SL', takeProfit: 'TP' };
   const toolActive = () => Boolean(chart.getDrawingTool() || chart.isEraserMode() || chart.isZoomAreaMode());
   const reserved = event => event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || toolActive();
-  function geometry(event, quote) {
+  function geometry(event, quote, offset = 0) {
     const bounds = host.getBoundingClientRect(), viewport = chart.viewport.getState(), rect = viewport.chartRect;
-    const x = event.clientX - bounds.left, y = event.clientY - bounds.top;
+    const x = event.clientX - bounds.left, y = event.clientY - bounds.top - offset;
     return { x, y, rect, viewport, inside: x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height,
       price: roundPrice(yToPrice(Math.max(rect.y, Math.min(rect.y + rect.height, y)), viewport), quote) };
   }
@@ -28,25 +28,13 @@ export function tradeGestures(widget, options) {
     // form must stop treating an old input as actively typed while dragging.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     const current = options.read();
+    const point = geometry(event, current.quote), label = widget.orderDisplay?.hit(point);
     drag = { target: { ...target, row: { ...target.row } }, field,
       bracket: field === 'price' && (event.button === 1 || options.bracketMode?.()), pointer: event.pointerId,
       account: current.accountId, quote: current.quote, entry: target.row.price ?? target.row.entryPrice,
-      price: target.row[field] ?? target.row.entryPrice, startY: event.clientY, moved: false, finished: false };
+      price: target.row[field] ?? target.row.entryPrice, offset: label?.owner === target.key && label.field === field ? point.y - label.lineY : 0,
+      startY: event.clientY, moved: false, finished: false };
     host.setPointerCapture(event.pointerId);
-  }
-  function entryLabel(point, targets) {
-    const manager = chart.tradingManager;
-    const contains = rect => point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
-    const handle = manager.tagBoxes?.find(contains);
-    if (handle) return handle.grab.kind === 'order'
-      ? targets.find(target => target.kind === 'order' && target.row.id === handle.grab.orderId) : null;
-    const rect = manager.tagRects().find(contains);
-    if (!rect) return null;
-    // Filled Entry labels have no native drag handle. Their close/reverse
-    // button identifies the position even when several entries share a price.
-    const button = manager.buttons?.find(button => ['closePosition', 'reversePosition'].includes(button.action.type) &&
-      button.x >= rect.x && button.x + button.size <= rect.x + rect.width && button.y >= rect.y && button.y + button.size <= rect.y + rect.height);
-    return button && targets.find(target => target.kind === 'position' && target.row.id === button.action.positionId);
   }
   function down(event) {
     if (event.button === 1) middleClick = false;
@@ -59,9 +47,13 @@ export function tradeGestures(widget, options) {
     if (event.target.closest('button,input,select,textarea')) return;
     if (!point.inside) return;
     if (!options.draft && current.blockedPrices?.some(price => price > 0 && Math.abs(priceToY(price, point.viewport) - point.y) <= 7)) return;
-    if (event.button === 1 && !options.draft) {
-      const target = entryLabel(point, current.targets);
-      if (target) { begin(event, target, 'price'); return; }
+    if (!options.draft) {
+      const label = widget.orderDisplay?.hit(point), target = label && current.targets.find(target => target.key === label.owner);
+      if (target) {
+        if (label.field !== 'price' || target.canMoveEntry || event.button === 1 || options.bracketMode?.()) begin(event, target, label.field);
+        else { event.preventDefault(); event.stopImmediatePropagation(); }
+        return;
+      }
     }
     const hit = current.targets.flatMap(target => {
       const fields = [...(target.canMoveEntry || event.button === 1 || options.bracketMode?.() ? ['price'] : []),
@@ -82,7 +74,7 @@ export function tradeGestures(widget, options) {
   function move(event) {
     if (!drag || drag.finished || drag.pointer !== event.pointerId) return;
     event.preventDefault(); event.stopImmediatePropagation();
-    const point = geometry(event, drag.quote);
+    const point = geometry(event, drag.quote, drag.offset);
     if (!(point.price > 0)) return;
     drag.moved ||= Math.abs(event.clientY - drag.startY) >= 2;
     drag.price = point.price;

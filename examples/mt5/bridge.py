@@ -49,7 +49,7 @@ def browser_assets():
         "worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     )
     assets = {'/': ('text/html; charset=utf-8', index)}
-    for name in ('app.js', 'session-levels.js', 'session-settings.js', 'cvd.js', 'pane-scale.js', 'pane-crosshair.js', 'layout-persistence.js', 'layout-transfer.js', 'mt5-trading.js', 'shared-layouts.js', 'order-model.js', 'order-projection.js', 'order-gestures.js', 'order-ticket.js', 'order-rules.js', 'order-time.js', 'chart-preferences.js', 'expiry-chart.js'):
+    for name in ('app.js', 'session-levels.js', 'session-settings.js', 'cvd.js', 'pane-scale.js', 'pane-crosshair.js', 'layout-persistence.js', 'layout-transfer.js', 'mt5-trading.js', 'shared-layouts.js', 'order-model.js', 'order-projection.js', 'order-gestures.js', 'order-ticket.js', 'order-rules.js', 'order-time.js', 'chart-preferences.js', 'expiry-chart.js', 'order-display.js', 'order-label-layout.js'):
         assets[f'/{name}'] = (MODULE, (ROOT / name).read_bytes())
     assets['/order-ticket.css'] = ('text/css; charset=utf-8', (ROOT / 'order-ticket.css').read_bytes())
     for name in LIBRARIES:

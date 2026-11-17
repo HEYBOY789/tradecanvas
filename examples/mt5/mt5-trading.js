@@ -5,6 +5,7 @@ import { installTradePreferences } from './chart-preferences.js';
 import { expiryChart } from './expiry-chart.js';
 import { expiryFields, timeLabel } from './order-time.js';
 import { tradeIssue, projectOrder } from './order-rules.js';
+import { installOrderDisplay } from './order-display.js';
 
 // Every command is preflighted and bound to the displayed account. The user
 // chooses whether chart clicks require a preview or use One-click trading.
@@ -391,6 +392,9 @@ export function createMt5Trading(getActiveWidget) {
     resetBracketMode();
     bar.append(quickSell, lots, quickBuy, bracketButton);
     widget.chartContainer.append(bar);
+    const display = installOrderDisplay(widget, () => ({ accountId: state?.account.id, currency: state?.account.currency || '', quote: state?.quotes[widget.getSymbol()],
+      orders: state?.orders.filter(row => row.symbol === widget.getSymbol()) || [],
+      positions: state?.positions.filter(row => row.symbol === widget.getSymbol()) || [] }));
     const pendingStops = pendingStopHandles(widget, () => ({ orders: state?.orders.filter(row => row.symbol === widget.getSymbol()) || [],
       positions: state?.positions.filter(row => row.symbol === widget.getSymbol()) || [],
       draftPrices: ticket.read().widget === widget && ticket.read().draft?.type !== 'market'
@@ -492,7 +496,7 @@ export function createMt5Trading(getActiveWidget) {
       },
       async reversePosition() { throw new Error('Đóng vị thế rồi đặt lệnh ngược chiều trong bảng MT5.'); },
     };
-    chart.setTradingConfig({ positionLabel: '{side} {qty} lot · {entry}', lineButtons: { reverse: false, trailStop: false } });
+    chart.setTradingConfig({ lineButtons: { reverse: false, trailStop: false } });
     chart.connectExecution(adapter);
     // The native trading handler precedes drawing placement in 2.x. Let the
     // existing tool own this press, then restore trading before the next paint.
@@ -524,7 +528,7 @@ export function createMt5Trading(getActiveWidget) {
       window.removeEventListener('keydown', escapeBracketMode); bracketModes.delete(widget);
       widget.chartContainer.removeEventListener('mousedown', preserveToolPress, true);
       widget.chartContainer.removeEventListener('touchstart', preserveToolPress, true);
-      pendingStops.destroy(); deadlines.destroy(); preferences.destroy(); bar.remove(); chart.disconnectExecution();
+      pendingStops.destroy(); display.destroy(); deadlines.destroy(); preferences.destroy(); bar.remove(); chart.disconnectExecution();
     };
   }
 
