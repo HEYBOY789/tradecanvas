@@ -152,6 +152,47 @@ test('middle-drag targets the right filled position even when buy and sell share
   } finally { await browser.close(); }
 });
 
+test('left-drag from a filled Entry sets an exit without switching modes or moving the Entry', async () => {
+  const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+  try {
+    const { page, fixture } = await tradingPage(browser);
+    fixture.orders = [];
+    fixture.quote = { bid: 3815, ask: 3815.01 };
+    Object.assign(fixture.positions[0], { stopLoss: null, takeProfit: null });
+    await page.waitForFunction(() => !testGrid.getWidget(0).getChart().getOrders().length && testGrid.getWidget(0).getChart().getPositions()[0].stopLoss == null);
+    await viewport(page);
+    const mode = page.getByRole('button', { name: 'Kéo SL/TP từ Entry', exact: true });
+    assert.equal(await mode.getAttribute('aria-pressed'), 'false');
+    const entry = await livePoint(page, 'position', '123');
+    await page.mouse.click(entry.x, entry.y);
+    assert.equal(fixture.checked.length, 0, 'a click alone only selects the position');
+
+    const yAt = price => page.evaluate(async price => {
+      const { priceToY } = await import('/vendor/core/index.js'), widget = testGrid.getWidget(0);
+      return widget.chartContainer.getBoundingClientRect().top + priceToY(price, widget.getChart().viewport.getState());
+    }, price);
+    await drag(page, entry, await yAt(3806) - entry.y, 'left');
+    const review = page.locator('#mt5-review'); await review.waitFor({ timeout: 3000 });
+    const sl = fixture.checked.at(-1).intent;
+    assert.equal(sl.positionId, '123');
+    assert.ok(sl.stopLoss > 3800 && sl.stopLoss < 3815, 'SL can lock in profit between Entry and Bid');
+    assert.equal(sl.takeProfit, undefined); assert.equal(fixture.executed.length, 0);
+    await review.getByRole('button', { name: 'Gửi tới MT5', exact: true }).click();
+    await review.waitFor({ state: 'detached' });
+
+    const tag = await livePoint(page, 'position', '123', true);
+    await drag(page, tag, await yAt(3835) - entry.y, 'left');
+    await review.waitFor({ timeout: 3000 });
+    const tp = fixture.checked.at(-1).intent;
+    assert.equal(tp.positionId, '123'); assert.ok(tp.takeProfit > 3815); assert.equal(tp.stopLoss, undefined);
+    await review.getByRole('button', { name: 'Hủy', exact: true }).click();
+    await review.waitFor({ state: 'detached' });
+    assert.equal(fixture.positions[0].entryPrice, 3800);
+    assert.equal(fixture.positions[0].stopLoss, sl.stopLoss);
+    assert.equal(fixture.executed.length, 1); assert.deepEqual(fixture.errors, []);
+  } finally { await browser.close(); }
+});
+
 test('middle-drag respects tools, modifiers, native buttons and Escape without submitting a trade', async () => {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {

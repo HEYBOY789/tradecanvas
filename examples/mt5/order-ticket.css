@@ -74,13 +74,15 @@
 .order-ticket-presets { border-top: 1px solid var(--mt5-border); padding-top: 13px; }
 .order-ticket-presets > summary { cursor: pointer; color: var(--mt5-muted); font-size: 12px; margin-bottom: 8px; }
 #mt5-ticket .order-ticket-presets input, #mt5-ticket .order-ticket-presets button, #mt5-ticket .order-ticket-presets select { border: 1px solid var(--mt5-border); border-radius: 5px; padding: 7px; margin: 3px 2px 3px 0; background: var(--mt5-input); color: var(--mt5-text); max-width: 100%; }
-.order-ticket-error, .order-ticket-warning { font-size: 11px; line-height: 1.5; margin: 8px 0; color: #e9a856; }
-.order-ticket-error:empty, .order-ticket-warning:empty { display: none; }
+.order-ticket-error { flex: none; font-size: 12px; line-height: 1.5; margin: 8px 18px 0; color: #e9a856; }
+#mt5-ticket[data-theme="light"] .order-ticket-error { color: #854a00; }
+.order-ticket-error:empty { display: none; }
 .order-ticket-submit { flex: none; margin: 12px 18px 18px; border: 0; border-radius: 9px; padding: 13px 10px; display: grid; gap: 5px; color: #fff; background: var(--mt5-buy); }
 .order-ticket-submit[data-side="sell"] { background: var(--mt5-sell); }
 .order-ticket-submit > strong { font-size: 16px; font-weight: 600; }
 .order-ticket-submit > span { font-size: 12px; }
-.order-ticket-submit:disabled { cursor: default; opacity: .45; }
+#mt5-ticket .order-ticket-submit:disabled, .mt5-projection-send:disabled { cursor: not-allowed; opacity: .45; }
+#mt5-ticket .order-ticket-submit[aria-busy="true"], .mt5-projection-send[aria-busy="true"] { cursor: wait; }
 .mt5-quick-trade { position: absolute; z-index: 5; display: flex; align-items: stretch; pointer-events: auto; font: 11px Inter, 'Segoe UI', sans-serif; border-radius: 5px; overflow: hidden; background: var(--tcw-bg, #131722); border: 1px solid var(--tcw-border, #2a2e39); }
 .mt5-quick-trade > button { cursor: pointer; padding: 5px 8px; display: grid; gap: 3px; border: 0; background: transparent; font: inherit; min-width: 72px; }
 .mt5-quick-trade > button[data-side="sell"] { color: #f23645; border-right: 1px solid #f2364540; }

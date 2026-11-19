@@ -5,9 +5,9 @@ export function orderProjection(widget, read, change, submit, cancel, bracketMod
     draft: true, disabled: () => read().sending, change, submit, cancel, bracketMode, update,
     read() {
       const current = read(), draft = current.draft;
-      return { quote: current.quote, accountId: current.accountId, quantity: current.estimate?.quantity, sending: current.sending,
+      return { quote: current.quote, accountId: current.accountId, quantity: current.estimate?.quantity, submitStatus: current.submitStatus,
         targets: draft && draft.type !== 'market' && widget.getSymbol() === draft.symbol
-          ? [{ key: 'draft', kind: 'draft', row: draft, canMoveEntry: true }] : [] };
+          ? [{ key: 'draft', kind: 'draft', row: draft }] : [] };
     },
   });
 }
@@ -20,8 +20,8 @@ export function pendingStopHandles(widget, read, complete, disabled, activate, b
       const current = read();
       return { quote: current.quote, accountId: current.accountId, blockedPrices: current.draftPrices,
         targets: [
-          ...current.orders.map(row => ({ key: `order:${row.id}`, kind: 'order', row, canMoveEntry: true })),
-          ...(current.positions || []).map(row => ({ key: `position:${row.id}`, kind: 'position', row, canMoveEntry: false })),
+          ...current.orders.map(row => ({ key: `order:${row.id}`, kind: 'order', row })),
+          ...(current.positions || []).map(row => ({ key: `position:${row.id}`, kind: 'position', row })),
         ] };
     },
     preview(target, row) {

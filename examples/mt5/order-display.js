@@ -41,7 +41,8 @@ export function installOrderDisplay(widget, read) {
       `Entry ${price(row.price ?? row.entryPrice)} · SL ${price(row.stopLoss)} · TP ${price(row.takeProfit)}`,
       ...(row.stopPrice ? [`Stop ${price(row.stopPrice)}`] : []),
       ...(Number.isFinite(row.profit) ? [`P/L ${row.profit >= 0 ? '+' : ''}${row.profit.toFixed(2)} ${read().currency}`] : []),
-      timeLabel(row.expiresAt, widget.getSettings().timezone, widget.getTradePreferences?.().clock)].join('\n');
+      timeLabel(row.expiresAt, widget.getSettings().timezone, widget.getTradePreferences?.().clock),
+      ...(box.kind === 'position' && box.field === 'price' ? ['Kéo Entry để đặt SL/TP'] : [])].join('\n');
     if (tooltip.textContent !== text) tooltip.textContent = text;
     tooltip.hidden = false;
     const width = tooltip.offsetWidth, height = tooltip.offsetHeight;

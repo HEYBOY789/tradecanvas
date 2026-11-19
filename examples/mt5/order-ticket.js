@@ -1,5 +1,5 @@
 import { ORDER_TYPES, orderIntent, priceFromUnit, roundPrice, translatedOrder, valueInUnit } from './order-model.js';
-import { tradeIssue } from './order-rules.js';
+import { defaultPendingPrice, pendingPriceIssue, tradeIssue } from './order-rules.js';
 import { expiryFields, wallTime, parseWallTime } from './order-time.js';
 
 const format = (value, digits = 2) => value == null ? '—' : Number(value).toLocaleString('vi-VN', { maximumFractionDigits: digits });
@@ -112,16 +112,16 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
   const hint = node('p', null, { class: 'order-ticket-muted' });
   hint.textContent = 'Giữ nút giữa chuột rồi kéo từ Entry để đặt/đổi SL hoặc TP, không cần bật trước. Hoặc bật SL/TP trên chart để kéo bằng chuột trái. Tắt nút: chuột trái dời Entry cùng SL/TP và giữ R:R. Kéo trực tiếp SL/TP để đổi riêng mức đó. Ước tính chưa gồm phí, swap và trượt giá.';
   const issue = node('p', null, { class: 'order-ticket-error', role: 'status' });
-  const permission = node('p', null, { class: 'order-ticket-warning' });
-  const submitButton = node('button', null, { type: 'submit', class: 'order-ticket-submit' });
+  issue.id = 'mt5-ticket-status';
+  const submitButton = node('button', null, { type: 'submit', class: 'order-ticket-submit', 'aria-describedby': issue.id });
   const presets = node('details', null, { class: 'order-ticket-presets' }); presets.append(node('summary', 'Mẫu lệnh'));
   const presetList = select('Mẫu lệnh đã lưu', 'preset', [['', 'Chọn mẫu lệnh']]);
   const presetName = node('input', null, { type: 'text', maxlength: '60', placeholder: 'Tên mẫu', 'aria-label': 'Tên mẫu lệnh' });
   presets.append(presetList, presetName, button('Lưu mẫu', savePreset), button('Xóa mẫu', removePreset));
   presetList.addEventListener('change', () => loadPreset(presetList.value));
   const content = node('div', null, { class: 'order-ticket-content' });
-  content.append(sides, tabs, qtyMode, qtyRow, triggerGroup, entryGroup, exits, tifGroup, presets, receipt, hint, permission, issue);
-  form.append(content, submitButton);
+  content.append(sides, tabs, qtyMode, qtyRow, triggerGroup, entryGroup, exits, tifGroup, presets, receipt, hint);
+  form.append(content, issue, submitButton);
   root.append(header, accountLine, form);
   const mount = () => {
     const workspace = document.getElementById('workspace'), fullscreen = document.fullscreenElement;
@@ -137,20 +137,39 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
   function entryPrice() { return draft?.type === 'market' ? marketPrice() : draft?.price; }
   function change(field, value, source = 'form') {
     if (!draft || sending) return;
+    const fromMarket = draft.type === 'market';
     if (field === 'quantityMode') {
       const lots = estimate?.quantity || currentQuote().min;
       draft.quantity = value === 'lots' ? lots : value === 'riskPercent' ? 1 : value === 'riskAmount' ? 10 : value === 'balancePercent' ? 1 : estimate?.notional || 100;
     }
     if (field === 'price' && source === 'projection') Object.assign(draft, translatedOrder(draft, value, currentQuote()));
     draft[field] = value;
+    if (field === 'type' && draft.type !== 'market' && (fromMarket || !Number.isFinite(draft.price))) {
+      const quote = currentQuote();
+      const price = defaultPendingPrice(draft.side, draft.type, quote);
+      // Moving from Market carries the existing SL/TP distances to the new Entry.
+      Object.assign(draft, translatedOrder({ ...draft, price: marketPrice() }, price, quote));
+      if (draft.type === 'stopLimit') draft.stopPrice = price;
+    }
     if (field === 'type' && value === 'stopLimit' && !(draft.stopPrice > 0)) draft.stopPrice = draft.price;
-    if (field === 'type' && draft.type !== 'market' && !Number.isFinite(draft.price)) draft.price = marketPrice();
     onChange(draft, source); schedule(); render();
   }
   function setSide(value) {
     if (!draft || sending || draft.side === value) return;
-    const entry = entryPrice();
-    for (const field of ['stopLoss', 'takeProfit']) if (draft[field] != null) draft[field] = roundPrice(2 * entry - draft[field], currentQuote());
+    const entry = entryPrice(), q = currentQuote();
+    const { type } = draft;
+    const at = type === 'stopLimit' ? draft.stopPrice : draft.price;
+    if (type !== 'market' && pendingPriceIssue(value, type, at, q)) {
+      const price = defaultPendingPrice(value, type, q);
+      Object.assign(draft, translatedOrder(draft, price, q));
+      if (type === 'stopLimit') draft.stopPrice = price;
+    }
+    const nextEntry = type === 'market' ? value === 'buy' ? q.ask : q.bid : draft.price;
+    for (const field of ['stopLoss', 'takeProfit']) {
+      if (draft[field] == null) continue;
+      const reference = type === 'market' ? entry : draft.price;
+      draft[field] = roundPrice(nextEntry + reference - draft[field], q);
+    }
     change('side', value);
   }
   function validate() {
@@ -176,6 +195,15 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
       render();
     }, 140);
   }
+  function submitStatus() {
+    const a = account();
+    if (sending) return { reason: 'Đang xử lý yêu cầu MT5…', waiting: true };
+    if (initialAccount !== a?.id) return { reason: 'Tài khoản đã thay đổi. Mở lại phiếu đặt lệnh.' };
+    if (a?.allowed === false) return { reason: a.reason || 'MT5 chưa cho phép giao dịch.' };
+    if (problem) return { reason: problem };
+    if (!(estimate?.quantity > 0)) return { reason: 'Đang tính khối lượng với MT5…', waiting: true };
+    return { reason: '' };
+  }
   function render() {
     if (!draft) return;
     const a = account(), q = currentQuote();
@@ -197,7 +225,7 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
     quantity.step = draft.quantityMode === 'lots' ? q.step : 'any';
     quantity.min = draft.quantityMode === 'lots' ? q.min : 0;
     quantity.max = draft.quantityMode === 'lots' ? q.max : '';
-    qtyResult.textContent = estimate ? `${format(estimate.quantity, 8)} lot` : 'Đang tính…';
+    qtyResult.textContent = estimate ? `${format(estimate.quantity, 8)} lot` : problem ? '—' : 'Đang tính…';
     for (const [field, control] of priceControls) {
       const exit = Boolean(control.toggle);
       control.group.hidden = field === 'price' ? draft.type === 'market' : field === 'stopPrice' ? draft.type !== 'stopLimit' : false;
@@ -218,15 +246,16 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
     for (const [id, value] of amounts) value.textContent = id === 'ratio' ? estimate?.ratio == null ? '—' : `${format(estimate.ratio)} : 1`
       : id === 'leverage' ? `1:${format(a.leverage, 0)}` : estimate?.[id] == null ? '—' : `${format(estimate[id], id === 'tickValue' ? 6 : 2)} ${a.currency}`;
     clickInput.checked = oneClick();
-    permission.textContent = initialAccount !== a.id ? 'Tài khoản đã thay đổi. Mở lại phiếu đặt lệnh.' : a.reason || '';
-    issue.textContent = problem;
+    const { reason, waiting } = submitStatus();
+    if (issue.textContent !== reason) issue.textContent = reason;
     submitButton.dataset.side = draft.side;
-    submitButton.disabled = sending || !estimate || Boolean(problem) || initialAccount !== a.id;
+    submitButton.disabled = Boolean(reason);
+    submitButton.setAttribute('aria-busy', String(Boolean(waiting)));
     submitButton.replaceChildren(node('strong', sending ? 'Đang gửi…' : `${draft.side === 'buy' ? 'Mua / Buy' : 'Bán / Sell'}${oneClick() ? ' · 1 nhấp' : ''}`),
       node('span', `${estimate ? format(estimate.quantity, 8) : '…'} lot ${draft.symbol} · ${ORDER_TYPES.find(([id]) => id === draft.type)?.[1]}`));
   }
   async function submit() {
-    if (!draft || sending || !estimate || problem) return;
+    if (!draft || submitStatus().reason) return;
     try { validate(); } catch (error) { problem = error.message; render(); return; }
     const intent = orderIntent(draft, estimate);
     sending = true; render();
@@ -285,7 +314,7 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
     },
     change, close, submit,
     update(patch, source = 'form') { if (!draft || sending) return; Object.assign(draft, patch); onChange(draft, source); schedule(); render(); },
-    read: () => ({ draft, widget, quote: currentQuote(), estimate, sending, accountId: account()?.id }),
+    read: () => ({ draft, widget, quote: currentQuote(), estimate, sending, submitStatus: draft ? submitStatus() : null, accountId: account()?.id }),
     refresh() {
       if (!draft) return;
       const q = currentQuote();

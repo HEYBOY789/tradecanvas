@@ -1,6 +1,6 @@
 import { priceToY, yToPrice } from '@tradecanvas/core';
 import { bracketSide, roundPrice } from './order-model.js';
-import { projectOrder, tradeIssue } from './order-rules.js';
+import { closingQuote, projectOrder, tradeIssue } from './order-rules.js';
 
 // One pointer owner handles entry, bracket and individual-stop drags. Drafts
 // edit only their model; a live trade changes only after the drop is submitted.
@@ -30,7 +30,7 @@ export function tradeGestures(widget, options) {
     const current = options.read();
     const point = geometry(event, current.quote), label = widget.orderDisplay?.hit(point);
     drag = { target: { ...target, row: { ...target.row } }, field,
-      bracket: field === 'price' && (event.button === 1 || options.bracketMode?.()), pointer: event.pointerId,
+      bracket: field === 'price' && (target.kind === 'position' || event.button === 1 || options.bracketMode?.()), pointer: event.pointerId,
       account: current.accountId, quote: current.quote, entry: target.row.price ?? target.row.entryPrice,
       price: target.row[field] ?? target.row.entryPrice, offset: label?.owner === target.key && label.field === field ? point.y - label.lineY : 0,
       startY: event.clientY, moved: false, finished: false };
@@ -49,15 +49,10 @@ export function tradeGestures(widget, options) {
     if (!options.draft && current.blockedPrices?.some(price => price > 0 && Math.abs(priceToY(price, point.viewport) - point.y) <= 7)) return;
     if (!options.draft) {
       const label = widget.orderDisplay?.hit(point), target = label && current.targets.find(target => target.key === label.owner);
-      if (target) {
-        if (label.field !== 'price' || target.canMoveEntry || event.button === 1 || options.bracketMode?.()) begin(event, target, label.field);
-        else { event.preventDefault(); event.stopImmediatePropagation(); }
-        return;
-      }
+      if (target) { begin(event, target, label.field); return; }
     }
     const hit = current.targets.flatMap(target => {
-      const fields = [...(target.canMoveEntry || event.button === 1 || options.bracketMode?.() ? ['price'] : []),
-        ...(target.row.type === 'stopLimit' ? ['stopPrice'] : []), 'stopLoss', 'takeProfit'];
+      const fields = ['price', ...(target.row.type === 'stopLimit' ? ['stopPrice'] : []), 'stopLoss', 'takeProfit'];
       return fields.flatMap(field => {
         const price = field === 'price' ? target.row.price ?? target.row.entryPrice : target.row[field];
         return price > 0 ? [{ target, field, distance: Math.abs(priceToY(price, point.viewport) - point.y) }] : [];
@@ -84,24 +79,27 @@ export function tradeGestures(widget, options) {
       if (options.update) options.update(proposed); else options.change(field, drag.price);
     }
   }
-  function preview() {
+  function preview(quote = drag?.quote) {
     if (!drag || !drag.moved) return null;
-    const field = drag.bracket ? bracketSide(drag.target.row.side, drag.entry, drag.price) : drag.field;
-    const row = projectOrder(drag.target.row, field, drag.price, drag.quote, drag.target.kind);
+    const { row: original, kind } = drag.target;
+    const reference = kind === 'position' ? closingQuote(original, drag.quote) : drag.entry;
+    const field = drag.bracket ? bracketSide(original.side, reference, drag.price) : drag.field;
+    const row = projectOrder(original, field, drag.price, quote, kind);
     return { field, row };
   }
   async function up(event) {
     if (!drag || drag.finished || drag.pointer !== event.pointerId) return;
     event.preventDefault(); event.stopImmediatePropagation();
     if (host.hasPointerCapture(event.pointerId)) host.releasePointerCapture(event.pointerId);
-    const dropped = drag, proposed = preview();
+    const dropped = drag, { quote, accountId } = options.read();
+    const proposed = preview(dropped.bracket && dropped.target.kind === 'position' ? quote ?? dropped.quote : dropped.quote);
     if (!proposed) { drag = null; return; }
     if (dropped.target.kind === 'draft') { drag = null; return; }
-    const issue = tradeIssue(proposed.row, options.read().quote, dropped.target.kind);
+    const issue = tradeIssue(proposed.row, quote, dropped.target.kind);
     if (issue) { drag = null; options.error?.(new Error(issue)); options.restore?.(); return; }
     dropped.finished = true;
     try {
-      if (options.read().accountId === dropped.account) await options.complete(dropped.target, proposed.row, proposed.field, dropped.account);
+      if (accountId === dropped.account) await options.complete(dropped.target, proposed.row, proposed.field, dropped.account);
     } finally { if (drag === dropped) drag = null; options.restore?.(); }
   }
   function cancel(event) {
@@ -170,7 +168,11 @@ export function tradeGestures(widget, options) {
         if (field === 'price' && target.kind === 'draft') {
           const send = value.line.querySelector('.mt5-projection-send');
           send.textContent = `${row.side === 'buy' ? 'Mua' : 'Bán'} ${row.type === 'stopLimit' ? 'Stop Limit' : row.type}`;
-          send.dataset.side = row.side; send.disabled = Boolean(current.sending || !current.quantity || tradeIssue(row, current.quote));
+          const { reason, waiting } = current.submitStatus;
+          send.dataset.side = row.side;
+          send.title = reason || tradeIssue(row, current.quote);
+          send.disabled = Boolean(send.title);
+          send.setAttribute('aria-busy', String(Boolean(waiting)));
         }
       }
     }

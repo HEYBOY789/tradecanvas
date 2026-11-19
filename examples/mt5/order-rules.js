@@ -1,8 +1,24 @@
 import { roundPrice, translatedOrder } from './order-model.js';
 
 export const stopDistance = q => Math.max(q?.stops || 0, q?.tickSize || .001);
-const closing = (row, q) => row.side === 'buy' ? q.bid : q.ask;
-const reference = (row, q, kind) => kind === 'position' || row.type === 'market' ? closing(row, q) : row.price;
+export const closingQuote = (row, q) => row.side === 'buy' ? q.bid : q.ask;
+const reference = (row, q, kind) => kind === 'position' || row.type === 'market' ? closingQuote(row, q) : row.price;
+const pendingDirection = (side, type) => (side === 'buy') !== (type === 'limit') ? 1 : -1;
+const pendingQuote = (side, q) => side === 'buy' ? q.ask : q.bid;
+
+export function defaultPendingPrice(side, type, q) {
+  // Leave room for tick rounding and small quote movements while the draft opens.
+  const distance = stopDistance(q) + Math.max(q.ask - q.bid, q.tickSize || .001);
+  return roundPrice(pendingQuote(side, q) + pendingDirection(side, type) * distance, q);
+}
+
+export function pendingPriceIssue(side, type, price, q) {
+  if (!(price > 0)) return 'Giá đặt phải lớn hơn 0.';
+  const gap = stopDistance(q), epsilon = (q.tickSize || .001) / 100;
+  const direction = pendingDirection(side, type);
+  if ((price - pendingQuote(side, q)) * direction >= gap - epsilon) return '';
+  return `${side === 'buy' ? 'Buy' : 'Sell'} ${type === 'limit' ? 'Limit' : 'Stop'} phải ${direction > 0 ? 'cao hơn' : 'thấp hơn'} ${side === 'buy' ? 'Ask' : 'Bid'} ít nhất ${gap}.`;
+}
 
 export function tradeIssue(row, q, kind = 'draft', now = Date.now()) {
   if (!q || !(q.bid > 0) || !(q.ask >= q.bid)) return 'Chưa có Bid/Ask hợp lệ.';
@@ -13,12 +29,8 @@ export function tradeIssue(row, q, kind = 'draft', now = Date.now()) {
   const ge = (a, b) => a >= b - epsilon, le = (a, b) => a <= b + epsilon;
   if (kind !== 'position' && row.type !== 'market') {
     const price = row.type === 'stopLimit' ? row.stopPrice : row.price;
-    if (!(price > 0)) return 'Giá đặt phải lớn hơn 0.';
-    const limit = row.type === 'limit', market = buy ? q.ask : q.bid;
-    const above = buy !== limit;
-    if (!(above ? ge(price, market + gap) : le(price, market - gap))) {
-      return `${buy ? 'Buy' : 'Sell'} ${limit ? 'Limit' : 'Stop'} phải ${above ? 'cao hơn' : 'thấp hơn'} ${buy ? 'Ask' : 'Bid'} ít nhất ${gap}.`;
-    }
+    const issue = pendingPriceIssue(row.side, row.type, price, q);
+    if (issue) return issue;
     if (row.type === 'stopLimit' && !(buy ? le(row.price, price) : ge(row.price, price))) return 'Giá Limit: Buy phải ≤ Stop; Sell phải ≥ Stop.';
   }
   const entry = reference(row, q, kind);
