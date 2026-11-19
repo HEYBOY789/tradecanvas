@@ -1,4 +1,5 @@
 import { ChartWidgetGrid } from '@tradecanvas/chart/widget';
+import { isPriceLevelAlert, priceToY } from '@tradecanvas/core';
 import { createCvd } from './cvd.js';
 import { installPaneScale } from './pane-scale.js';
 import { createGridPriceLink, installPaneCrosshair } from './pane-crosshair.js';
@@ -21,6 +22,26 @@ function showAlert(message) {
 function showStatus(message, connected = false) {
   status.textContent = message;
   status.dataset.connected = connected;
+}
+
+function priceAlertMenuItems(widget, { area, price }) {
+  if (!widget || !Number.isFinite(price) || (area !== 'plot' && area !== 'priceAxis')) return [];
+  const chart = widget.getChart();
+  const viewport = chart.viewport.getState();
+  const y = priceToY(price, viewport);
+  // Match the chart's alert drag radius, in screen pixels at any zoom.
+  let closest = 6;
+  let target;
+  for (const alert of chart.getAlerts()) {
+    if (!isPriceLevelAlert(alert)) continue;
+    const line = priceToY(alert.price, viewport);
+    if (line < viewport.chartRect.y || line > viewport.chartRect.y + viewport.chartRect.height) continue;
+    const distance = Math.abs(line - y);
+    if (distance <= closest) { closest = distance; target = alert; }
+  }
+  if (!target) return [];
+  const { id, price: level } = target;
+  return [{ label: `Xóa cảnh báo tại ${chart.formatPrice(level)}`, icon: 'trash', danger: true, onSelect: () => chart.removeAlert(id) }];
 }
 
 async function getJSON(path, signal) {
@@ -150,7 +171,7 @@ async function start() {
       indicatorMenuItems: context => connection().sessions.menuItems(context),
       onSymbolChange: () => trading.symbolChanged(),
       drawingMenuItems: context => trading.drawingMenuItems(cell.widget, context),
-      chartMenuItems: context => trading.chartMenuItems(cell.widget, context),
+      chartMenuItems: context => [...priceAlertMenuItems(cell.widget, context), ...trading.chartMenuItems(cell.widget, context)],
     };
     // Preserve the first chart's browser settings and dock from the single chart.
     if (index === 0) Object.assign(cell.options, { persistSettings: true, features: { dock: true } });
