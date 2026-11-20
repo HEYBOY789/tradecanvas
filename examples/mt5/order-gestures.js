@@ -1,12 +1,15 @@
 import { priceToY, yToPrice } from '@tradecanvas/core';
-import { bracketSide, roundPrice } from './order-model.js';
+import { bracketSide, pipSize, roundPrice, valueInUnit } from './order-model.js';
 import { closingQuote, projectOrder, tradeIssue } from './order-rules.js';
+
+const pipFormat = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 8 });
 
 // One pointer owner handles entry, bracket and individual-stop drags. Drafts
 // edit only their model; a live trade changes only after the drop is submitted.
 export function tradeGestures(widget, options) {
   const chart = widget.getChart(), host = widget.chartContainer;
   const layer = document.createElement('div'); layer.className = options.draft ? 'mt5-projection' : 'mt5-projection mt5-live-stops'; host.append(layer);
+  const stopReadout = document.createElement('div'); stopReadout.className = 'mt5-stop-drag-readout'; stopReadout.hidden = true; layer.append(stopReadout);
   const controls = new Map();
   let frame, timer, stopped = false, drag = null, inset = 0, middleClick = false;
   const names = { price: 'Entry', stopPrice: 'Stop', stopLoss: 'SL', takeProfit: 'TP' };
@@ -87,6 +90,21 @@ export function tradeGestures(widget, options) {
     const row = projectOrder(original, field, drag.price, quote, kind);
     return { field, row };
   }
+  function renderStopReadout(proposed, viewport) {
+    const { field, row } = proposed ?? {};
+    const price = row?.[field];
+    if (layer.hidden || drag?.finished || (field !== 'stopLoss' && field !== 'takeProfit') || !(price > 0)) {
+      stopReadout.hidden = true;
+      return;
+    }
+    const entry = row.entryPrice ?? row.price, pip = pipSize(widget.getSymbol());
+    const distance = pip && entry > 0 ? Math.abs(valueInUnit(price, 'pips', entry, { pipSize: pip }, row.side, field)) : null;
+    const text = `${names[field]} ${chart.formatPrice(price)}${distance == null ? '' : ` · ${pipFormat.format(distance)} pip từ Entry`}`;
+    if (stopReadout.textContent !== text) stopReadout.textContent = text;
+    stopReadout.dataset.field = field;
+    stopReadout.style.setProperty('--stop-drag-y', `${priceToY(price, viewport) - viewport.chartRect.y}px`);
+    stopReadout.hidden = false;
+  }
   async function up(event) {
     if (!drag || drag.finished || drag.pointer !== event.pointerId) return;
     event.preventDefault(); event.stopImmediatePropagation();
@@ -145,6 +163,7 @@ export function tradeGestures(widget, options) {
     const livePrices = options.draft ? [...chart.getOrders(), ...chart.getPositions()].flatMap(row =>
       [row.price ?? row.entryPrice, row.stopPrice, row.stopLoss, row.takeProfit]).filter(price => price > 0) : [];
     if (proposed && drag.target.kind !== 'draft') options.preview?.(drag.target, proposed.row);
+    renderStopReadout(proposed, viewport);
     if (current.quote) for (const target of current.targets) {
       const active = drag?.target.key === target.key;
       const row = active && proposed ? proposed.row : target.row;

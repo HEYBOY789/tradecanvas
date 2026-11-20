@@ -47,6 +47,16 @@ async function accepted(page, action) {
   await page.waitForFunction(() => !document.querySelector('[aria-label="Mua nhanh MT5"]').disabled);
 }
 
+async function checkStopReadout(page, field, price, entry) {
+  const readout = page.locator('.mt5-stop-drag-readout:visible');
+  await readout.waitFor({ timeout: 2000 });
+  const formatted = await page.evaluate(price => testGrid.getWidget(0).getChart().formatPrice(price), price);
+  const pips = Math.abs(price - entry) / .01;
+  const formattedPips = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 8 }).format(pips);
+  assert.equal(await readout.textContent(), `${field} ${formatted} · ${formattedPips} pip từ Entry`);
+  return readout;
+}
+
 test('middle-drag from draft Entry creates SL/TP without enabling a mode or moving Entry', async () => {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
@@ -56,8 +66,16 @@ test('middle-drag from draft Entry creates SL/TP without enabling a mode or movi
     await ticket.getByRole('tab', { name: 'Limit', exact: true }).click(); await ticket.locator('[name=price]').fill('3760');
     await viewport(page);
     assert.equal(await page.getByRole('button', { name: 'Kéo SL/TP từ Entry', exact: true }).getAttribute('aria-pressed'), 'false');
-    await drag(page, await draftPoint(page), 35);
+    const entry = await draftPoint(page);
+    await page.mouse.move(entry.x, entry.y); await page.mouse.down({ button: 'middle' });
+    await page.mouse.move(entry.x, entry.y + 20, { steps: 3 });
+    const firstSL = Number(await ticket.locator('[name=stopLoss]').inputValue());
+    await checkStopReadout(page, 'SL', firstSL, 3760);
+    await page.mouse.move(entry.x, entry.y + 35, { steps: 3 });
     const sl = Number(await ticket.locator('[name=stopLoss]').inputValue());
+    assert.notEqual(sl, firstSL);
+    const readout = await checkStopReadout(page, 'SL', sl, 3760);
+    await page.mouse.up({ button: 'middle' }); await readout.waitFor({ state: 'hidden' });
     assert.ok(sl > 0 && sl < 3760, `middle-drag must create SL below Entry, got ${sl}; Entry=${await ticket.locator('[name=price]').inputValue()}`);
     assert.equal(Number(await ticket.locator('[name=price]').inputValue()), 3760);
     await drag(page, await draftPoint(page), -55);
@@ -171,20 +189,33 @@ test('left-drag from a filled Entry sets an exit without switching modes or movi
       const { priceToY } = await import('/vendor/core/index.js'), widget = testGrid.getWidget(0);
       return widget.chartContainer.getBoundingClientRect().top + priceToY(price, widget.getChart().viewport.getState());
     }, price);
-    await drag(page, entry, await yAt(3806) - entry.y, 'left');
+    await page.mouse.move(entry.x, entry.y); await page.mouse.down();
+    await page.mouse.move(entry.x, await yAt(3806), { steps: 6 });
+    await page.locator('.mt5-stop-drag-readout:visible').waitFor({ timeout: 2000 });
+    const previewSL = await page.evaluate(() => testGrid.getWidget(0).getChart().getPositions()[0].stopLoss);
+    const readout = await checkStopReadout(page, 'SL', previewSL, 3800);
+    assert.equal(fixture.checked.length, 0);
+    await page.mouse.up(); await readout.waitFor({ state: 'hidden' });
     const review = page.locator('#mt5-review'); await review.waitFor({ timeout: 3000 });
     const sl = fixture.checked.at(-1).intent;
     assert.equal(sl.positionId, '123');
+    assert.equal(sl.stopLoss, previewSL);
     assert.ok(sl.stopLoss > 3800 && sl.stopLoss < 3815, 'SL can lock in profit between Entry and Bid');
     assert.equal(sl.takeProfit, undefined); assert.equal(fixture.executed.length, 0);
     await review.getByRole('button', { name: 'Gửi tới MT5', exact: true }).click();
     await review.waitFor({ state: 'detached' });
 
     const tag = await livePoint(page, 'position', '123', true);
-    await drag(page, tag, await yAt(3835) - entry.y, 'left');
+    await page.mouse.move(tag.x, tag.y); await page.mouse.down();
+    await page.mouse.move(tag.x, tag.y + await yAt(3835) - entry.y, { steps: 6 });
+    await readout.waitFor({ timeout: 2000 });
+    const previewTP = await page.evaluate(() => testGrid.getWidget(0).getChart().getPositions()[0].takeProfit);
+    await checkStopReadout(page, 'TP', previewTP, 3800);
+    await page.mouse.up(); await readout.waitFor({ state: 'hidden' });
     await review.waitFor({ timeout: 3000 });
     const tp = fixture.checked.at(-1).intent;
     assert.equal(tp.positionId, '123'); assert.ok(tp.takeProfit > 3815); assert.equal(tp.stopLoss, undefined);
+    assert.equal(tp.takeProfit, previewTP);
     await review.getByRole('button', { name: 'Hủy', exact: true }).click();
     await review.waitFor({ state: 'detached' });
     assert.equal(fixture.positions[0].entryPrice, 3800);
@@ -224,7 +255,10 @@ test('middle-drag respects tools, modifiers, native buttons and Escape without s
     await page.mouse.click(point.x, point.y, { button: 'middle' });
     await page.mouse.move(point.x, point.y); await page.mouse.down({ button: 'middle' });
     await page.mouse.move(point.x, point.y + 30, { steps: 6 });
+    const readout = page.locator('.mt5-stop-drag-readout:visible');
+    await readout.waitFor({ timeout: 2000 });
     await page.keyboard.press('Escape'); await page.mouse.up({ button: 'middle' });
+    await readout.waitFor({ state: 'hidden' });
     assert.equal(await page.evaluate(() => testGrid.getWidget(0).getChart().getOrders()[0].stopLoss), 3740);
     assert.equal(fixture.checked.length, 0); assert.equal(fixture.executed.length, 0);
     assert.deepEqual(fixture.errors, []);

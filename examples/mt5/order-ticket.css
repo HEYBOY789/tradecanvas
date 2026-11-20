@@ -102,6 +102,26 @@
 .mt5-projection-takeProfit { border-color: #089981; color: #089981; }
 .mt5-projection-stopPrice { border-color: #ff9800; color: #ff9800; }
 .mt5-projection-line > button { pointer-events: auto; transform: translateY(-50%); margin: 0; padding: 4px 6px; background: var(--tcw-bg, #131722); color: inherit; border: 1px solid currentColor; font: 11px Inter, 'Segoe UI', sans-serif; border-radius: 3px; touch-action: none; }
+.mt5-stop-drag-readout {
+  --stop-color: #f23645;
+  position: absolute;
+  z-index: 1;
+  left: 8px;
+  top: clamp(13px, var(--stop-drag-y), calc(100% - 13px));
+  transform: translateY(-50%);
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 7px;
+  border: 1px solid var(--stop-color);
+  border-radius: 4px;
+  background: var(--tcw-bg, #131722);
+  color: var(--tcw-text, #d1d4dc);
+  font: 600 11px/16px Inter, 'Segoe UI', sans-serif;
+  pointer-events: none;
+}
+.mt5-stop-drag-readout[data-field="takeProfit"] { --stop-color: #089981; }
 .mt5-projection-tag { cursor: ns-resize; }
 .mt5-projection-send { cursor: pointer; color: #fff !important; background: #2962ff !important; border-color: #2962ff !important; }
 .mt5-projection-send[data-side="sell"] { background: #f23645 !important; border-color: #f23645 !important; }
