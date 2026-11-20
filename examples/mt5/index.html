@@ -64,6 +64,9 @@
     .mt5-dialog input, .mt5-dialog select { padding: 8px; color: inherit; background: #0e151f;
       border: 1px solid #48586d; border-radius: 4px; font: inherit; min-width: 0; }
     .mt5-fields { display: grid; gap: 12px; }
+    .mt5-edit-price { display: grid; grid-template-columns: minmax(0, 1fr) minmax(72px, 1fr) auto; align-items: center; gap: 5px 10px; }
+    .mt5-edit-price small { grid-column: 2 / -1; color: #adbbcf; }
+    .mt5-edit-price small:empty { display: none; }
     .mt5-fields label { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 12px; }
     .mt5-warning { color: #f5c478; }
     #mt5-account { width: min(1180px, calc(100vw - 28px)); }

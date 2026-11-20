@@ -1,5 +1,23 @@
 export const ORDER_TYPES = [['market', 'Market'], ['limit', 'Limit'], ['stop', 'Stop'], ['stopLimit', 'Stop Limit']];
 
+const FX_CURRENCIES = new Set('AUD CAD CHF CNH CZK DKK EUR GBP HKD HUF JPY MXN NOK NZD PLN SEK SGD THB TRY USD ZAR'.split(' '));
+const CENT_PIP = /^(XAU|XAG|XALUSD|XCU|XNI|XPB|XZN|UKOIL|USOIL|DXY)/;
+const TENTH_PIP = /^(BTCUSD|ETHUSD|XPDUSD|XPTUSD|AUS200|FR40|USTEC|US500|STOXX50|UK100)/;
+const WHOLE_PIP = /^(BTCAUD|BTCCNH|US30|DE30|HK50|JP225)/;
+
+// Exness specifications. Broker suffixes such as "m" follow the instrument name.
+export function pipSize(symbol) {
+  const name = symbol?.toUpperCase() || '';
+  if (CENT_PIP.test(name) || name.startsWith('BTCXAG')) return .01;
+  if (TENTH_PIP.test(name)) return .1;
+  if (WHOLE_PIP.test(name)) return 1;
+  if (/^BTC(THB|ZAR|JPY)/.test(name)) return 10;
+  if (name.startsWith('XNGUSD')) return .001;
+  if (name.startsWith('BCXAU')) return .0001;
+  const base = name.slice(0, 3), currency = name.slice(3, 6);
+  if (base !== currency && FX_CURRENCIES.has(base) && FX_CURRENCIES.has(currency)) return currency === 'JPY' ? .01 : .0001;
+}
+
 export function roundPrice(value, quote) {
   const step = quote?.tickSize || 0.001;
   return Number((Math.round(value / step) * step).toFixed(quote?.digits ?? 8));
@@ -30,15 +48,25 @@ export function orderIntent(draft, estimate) {
   return result;
 }
 
+function offsetDirection(side, role) {
+  if (role === 'stopLoss') return side === 'buy' ? -1 : 1;
+  if (role === 'takeProfit') return side === 'buy' ? 1 : -1;
+  return 1;
+}
+
 export function priceFromUnit(value, mode, entry, side, role, quote) {
-  const direction = (side === 'buy' ? 1 : -1) * (role === 'stopLoss' ? -1 : 1);
+  const direction = offsetDirection(side, role);
+  if (mode === 'pips') return roundPrice(entry + direction * value * quote.pipSize, quote);
   if (mode === 'ticks') return roundPrice(entry + direction * value * quote.tickSize, quote);
   if (mode === 'percent') return roundPrice(entry * (1 + direction * value / 100), quote);
   return roundPrice(value, quote);
 }
 
-export function valueInUnit(price, mode, entry, quote) {
+export function valueInUnit(price, mode, entry, quote, side, role) {
   if (price == null) return '';
+  if (mode !== 'price' && !Number.isFinite(entry)) return '';
+  if (mode === 'pips') return Number(((price - entry) / quote.pipSize * offsetDirection(side, role)).toFixed(8));
+  if (mode === 'ticks' && (role === 'price' || role === 'stopPrice')) return Number(((price - entry) / quote.tickSize).toFixed(3));
   if (mode === 'ticks') return Number((Math.abs(price - entry) / quote.tickSize).toFixed(3));
   if (mode === 'percent') return Number((Math.abs(price - entry) / entry * 100).toFixed(4));
   return price;

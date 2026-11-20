@@ -56,6 +56,8 @@
 #mt5-ticket input:disabled { opacity: .35; }
 .order-ticket-number > span { white-space: nowrap; font-size: 11px; }
 .order-ticket-muted { color: var(--mt5-muted); font-size: 11px; }
+.order-ticket-pip-note { display: block; margin-top: 4px; }
+.order-ticket-pip-note:empty { display: none; }
 .order-ticket-field-head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; color: var(--mt5-muted); }
 .order-ticket-field-head > select { font-size: 11px !important; }
 .order-ticket-field-head > input { margin-left: auto; accent-color: var(--mt5-buy); width: 30px; height: 18px; cursor: pointer; }

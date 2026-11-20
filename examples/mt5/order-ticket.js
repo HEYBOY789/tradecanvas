@@ -1,4 +1,4 @@
-import { ORDER_TYPES, orderIntent, priceFromUnit, roundPrice, translatedOrder, valueInUnit } from './order-model.js';
+import { ORDER_TYPES, orderIntent, pipSize, priceFromUnit, roundPrice, translatedOrder, valueInUnit } from './order-model.js';
 import { defaultPendingPrice, pendingPriceIssue, tradeIssue } from './order-rules.js';
 import { expiryFields, wallTime, parseWallTime } from './order-time.js';
 
@@ -58,23 +58,23 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
     const group = node('div', null, { class: 'order-ticket-price-group' });
     const head = node('div', null, { class: 'order-ticket-field-head' });
     const caption = node('span', label);
-    const units = select(`${label}: đơn vị`, `${name}Unit`, [['price', 'Giá'], ['ticks', 'Ticks'], ['percent', '% giá']]);
+    const units = select(`${label}: đơn vị`, `${name}Unit`, [['price', 'Giá'], ['pips', 'Pip'], ['ticks', 'Ticks'], ['percent', '% giá']]);
     if (!exit) units.lastChild.remove();
     const input = node('input', null, { type: 'number', step: 'any', name, 'aria-label': label });
     const toggle = exit ? node('input', null, { type: 'checkbox', role: 'switch', 'aria-label': `Bật ${label}` }) : null;
     head.append(caption, units); if (toggle) head.append(toggle);
     const row = node('div', null, { class: 'order-ticket-number' });
     const converted = node('span', null, { class: 'order-ticket-muted' }); row.append(input, converted);
-    group.append(head, row);
-    const control = { group, caption, input, units, toggle, converted };
+    const pipNote = node('small', null, { class: 'order-ticket-muted order-ticket-pip-note' });
+    group.append(head, row, pipNote);
+    const control = { group, caption, input, units, toggle, converted, pipNote };
     priceControls.set(name, control);
     input.addEventListener('input', () => {
-      const current = currentQuote(), entry = entryPrice();
-      if (!input.value) { if (exit) change(name, null); return; }
-      const value = Number(input.value);
-      const price = exit ? priceFromUnit(value, units.value, entry, draft.side, name, current)
-        : units.value === 'ticks' ? roundPrice(marketPrice() + value * current.tickSize, current) : roundPrice(value, current);
-      change(name, price);
+      const current = currentQuote();
+      if (!draft || !current) return;
+      if (!input.value) { change(name, null); return; }
+      const entry = exit ? entryPrice() : marketPrice();
+      change(name, priceFromUnit(input.valueAsNumber, units.value, entry, draft.side, name, { ...current, pipSize: pipSize(draft.symbol) }));
     });
     units.addEventListener('change', () => render());
     toggle?.addEventListener('change', () => {
@@ -131,13 +131,15 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
   };
   document.addEventListener('fullscreenchange', mount);
   let draft = null, widget = null, estimate = null, estimateTimer, sequence = 0, sending = false, lastQuote = '';
-  let problem = '', initialAccount = '', calculating = false, themeObserver;
+  let problem = '', initialAccount = '', calculating = false, themeObserver, lastEntry;
   function currentQuote() { return quoteFor(draft?.symbol); }
   function marketPrice() { const q = currentQuote(); return draft?.side === 'sell' ? q?.bid : q?.ask; }
   function entryPrice() { return draft?.type === 'market' ? marketPrice() : draft?.price; }
   function change(field, value, source = 'form') {
     if (!draft || sending) return;
     const fromMarket = draft.type === 'market';
+    const previousEntry = entryPrice() ?? lastEntry;
+    if (previousEntry > 0) lastEntry = previousEntry;
     if (field === 'quantityMode') {
       const lots = estimate?.quantity || currentQuote().min;
       draft.quantity = value === 'lots' ? lots : value === 'riskPercent' ? 1 : value === 'riskAmount' ? 10 : value === 'balancePercent' ? 1 : estimate?.notional || 100;
@@ -152,6 +154,15 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
       if (draft.type === 'stopLimit') draft.stopPrice = price;
     }
     if (field === 'type' && value === 'stopLimit' && !(draft.stopPrice > 0)) draft.stopPrice = draft.price;
+    const entry = entryPrice();
+    if (source === 'form' && (field === 'price' || (field === 'type' && value === 'market')) && previousEntry > 0 && entry > 0) {
+      for (const exit of ['stopLoss', 'takeProfit']) {
+        if (draft[exit] != null && priceControls.get(exit).units.value === 'pips') {
+          draft[exit] = roundPrice(draft[exit] + entry - previousEntry, currentQuote());
+        }
+      }
+    }
+    if (entry > 0) lastEntry = entry;
     onChange(draft, source); schedule(); render();
   }
   function setSide(value) {
@@ -206,8 +217,9 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
   }
   function render() {
     if (!draft) return;
-    const a = account(), q = currentQuote();
-    if (!q || !a) return;
+    const a = account(), current = currentQuote();
+    if (!current || !a) return;
+    const q = { ...current, pipSize: pipSize(draft.symbol) };
     root.dataset.theme = widget?.root?.dataset.tcwTheme || 'dark';
     title.textContent = draft.symbol;
     accountLine.textContent = `${a.demo ? 'DEMO' : 'THẬT'} · ${a.login} · ${a.server}`;
@@ -229,16 +241,27 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
     for (const [field, control] of priceControls) {
       const exit = Boolean(control.toggle);
       control.group.hidden = field === 'price' ? draft.type === 'market' : field === 'stopPrice' ? draft.type !== 'stopLimit' : false;
-      if (field === 'price') control.caption.textContent = draft.type === 'stop' ? 'Giá Stop' : 'Giá Limit';
+      if (field === 'price') {
+        const label = draft.type === 'stop' ? 'Giá Stop' : 'Giá Limit';
+        control.caption.textContent = label;
+        control.input.setAttribute('aria-label', label);
+        control.units.setAttribute('aria-label', `${label}: đơn vị`);
+      }
       if (exit) control.toggle.checked = draft[field] != null;
-      control.input.disabled = sending || (exit && draft[field] == null);
+      const pipOption = control.units.querySelector('option[value="pips"]');
+      pipOption.hidden = pipOption.disabled = !q.pipSize;
       const entry = exit ? entryPrice() : marketPrice();
-      const value = exit ? valueInUnit(draft[field], control.units.value, entry, q)
-        : control.units.value === 'ticks' ? Number(((draft[field] - entry) / q.tickSize).toFixed(3)) : draft[field];
+      const mode = control.units.value;
+      if (exit) control.toggle.disabled = sending || (!(entry > 0) && draft[field] == null);
+      control.input.disabled = sending || (exit && (draft[field] == null || (mode !== 'price' && !(entry > 0))));
+      const value = valueInUnit(draft[field], mode, entry, q, draft.side, field);
       if (document.activeElement !== control.input) control.input.value = value ?? '';
-      control.input.step = control.units.value === 'price' ? q.tickSize : 'any';
-      control.converted.textContent = draft[field] == null ? 'Chưa đặt' : control.units.value === 'price'
+      control.input.step = mode === 'price' ? q.tickSize : 'any';
+      control.converted.textContent = draft[field] == null ? 'Chưa đặt' : mode === 'price'
         ? `${format(Math.abs(draft[field] - entry) / q.tickSize, 1)} ticks` : format(draft[field], q.digits);
+      control.pipNote.textContent = mode === 'pips'
+        ? `Mốc ${exit ? 'Entry' : draft.side === 'buy' ? 'Ask' : 'Bid'} ${format(entry, q.digits)} · 1 pip = ${format(q.pipSize, 8)}`
+        : '';
     }
     tifGroup.hidden = false; tif.value = draft.timeInForce;
     expiry.root.hidden = draft.timeInForce === 'gtc'; expiryNote.hidden = draft.timeInForce === 'gtc';
@@ -308,6 +331,7 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
       const q = quoteFor(owner.getSymbol());
       draft = { symbol: owner.getSymbol(), side: 'buy', type: 'market', price: q.ask, quantityMode: 'lots', quantity: q.min,
         stopLoss: null, takeProfit: null, timeInForce: (q.expirationMode == null || q.expirationMode & 1) ? 'gtc' : 'day', ...initial };
+      lastEntry = entryPrice();
       root.hidden = false; document.getElementById('workspace').classList.add('has-order-ticket');
       for (const control of priceControls.values()) control.units.value = 'price';
       lastQuote = ''; listPresets(); schedule(); render(); return true;

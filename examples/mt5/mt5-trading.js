@@ -1,5 +1,5 @@
 import { createOrderTicket } from './order-ticket.js';
-import { drawingOrder, roundPrice } from './order-model.js';
+import { drawingOrder, pipSize, priceFromUnit, roundPrice, valueInUnit } from './order-model.js';
 import { orderProjection, pendingStopHandles } from './order-projection.js';
 import { installTradePreferences } from './chart-preferences.js';
 import { expiryChart } from './expiry-chart.js';
@@ -12,6 +12,7 @@ import { installOrderDisplay } from './order-display.js';
 const uid = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), n => n.toString(16).padStart(2, '0')).join('');
 const copy = value => JSON.parse(JSON.stringify(value));
 const money = (value, currency) => `${Number(value).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} ${currency}`;
+const priceText = (value, quote) => Number(value).toLocaleString('vi-VN', { maximumFractionDigits: quote.digits ?? 8 });
 
 function element(tag, text, attrs = {}) {
   const node = document.createElement(tag);
@@ -205,28 +206,61 @@ export function createMt5Trading(getActiveWidget) {
         const actions = element('td');
         actions.append(button('Thời hạn', () => editExpiry(row, position ? 'position' : 'order')));
         if (row.expiresAt) actions.append(element('small', `${timeLabel(row.expiresAt, getActiveWidget()?.getSettings().timezone)} · ${row.expiryStatus || 'active'}${row.expiryError ? ` · ${row.expiryError}` : ''}`));
-        if (position) actions.append(button('Sửa SL/TP', () => editPosition(row)), button('Đóng vị thế', () => review('close', { positionId: row.id, quantity: row.quantity }, row.symbol, a.id).catch(report)));
-        else actions.append(button('Sửa giá', () => editOrder(row)), button('Hủy lệnh', () => review('cancel', { orderId: row.id }, row.symbol, a.id).catch(report)));
+        if (position) actions.append(button('Sửa SL/TP', () => editPosition(row).catch(report)), button('Đóng vị thế', () => review('close', { positionId: row.id, quantity: row.quantity }, row.symbol, a.id).catch(report)));
+        else actions.append(button('Sửa giá', () => editOrder(row).catch(report)), button('Hủy lệnh', () => review('cancel', { orderId: row.id }, row.symbol, a.id).catch(report)));
         tr.append(actions); table.append(tr);
       }
       lists.append(table);
     }
   }
 
-  function field(form, label, name, value, attributes = {}) {
-    const wrapper = element('label', label);
-    const input = element('input', null, { name, type: 'number', step: 'any', ...attributes });
-    input.value = value ?? '';
-    wrapper.append(input); form.append(wrapper);
-    return input;
+  function editPriceField(form, label, name, initial, { quote, side, reference, required }) {
+    const group = element('div', null, { class: 'mt5-edit-price' });
+    const input = element('input', null, { name, type: 'number', step: 'any', 'aria-label': label });
+    input.required = Boolean(required);
+    input.value = initial ?? '';
+    const units = element('select', null, { name: `${name}Unit`, 'aria-label': `${label}: đơn vị` });
+    units.add(new Option('Giá', 'price'));
+    if (quote.pipSize) units.add(new Option('Pip', 'pips'));
+    units.hidden = units.options.length === 1;
+    const hint = element('small');
+    const role = name === 'stopLoss' || name === 'takeProfit' ? name : 'price';
+    let mode = 'price';
+    const read = () => {
+      if (input.value === '') return null;
+      if (mode === 'price') return input.valueAsNumber;
+      const base = reference();
+      return base > 0 ? priceFromUnit(input.valueAsNumber, mode, base, side, role, quote) : NaN;
+    };
+    const render = () => {
+      const price = read();
+      input.setCustomValidity(price != null && !Number.isFinite(price) ? 'Nhập giá tham chiếu hợp lệ trước.' : '');
+      hint.textContent = mode === 'pips' && Number.isFinite(price) ? `Giá ${priceText(price, quote)}` : '';
+    };
+    units.addEventListener('change', () => {
+      const price = read();
+      if (price != null && (!Number.isFinite(price) || (units.value === 'pips' && !(reference() > 0)))) {
+        units.value = mode;
+        return;
+      }
+      mode = units.value;
+      input.value = price == null ? '' : valueInUnit(price, mode, reference(), quote, side, role);
+    });
+    group.append(element('span', label), input, units, hint);
+    form.append(group);
+    form.addEventListener('input', render);
+    form.addEventListener('change', render);
+    return read;
   }
 
-  function select(form, label, name, values) {
-    const wrapper = element('label', label);
-    const input = element('select', null, { name });
-    for (const [value, text] of values) input.append(element('option', text, { value }));
-    wrapper.append(input); form.append(wrapper);
-    return input;
+  async function quoteForEdit(symbol, accountId) {
+    const current = state?.quotes[symbol];
+    if (current) return { ...current, pipSize: pipSize(symbol) };
+    const snapshot = await api(`state?${new URLSearchParams({ symbols: symbol })}`);
+    if (snapshot.account.id !== accountId || state?.account.id !== accountId) throw new Error('Tài khoản đã thay đổi.');
+    const quote = snapshot.quotes[symbol];
+    if (!quote) throw new Error('Chưa có dữ liệu giao dịch cho mã này.');
+    return { ...quote, pipSize: pipSize(symbol) };
   }
 
   async function openTicket(owner = getActiveWidget(), initial = {}) {
@@ -257,55 +291,62 @@ export function createMt5Trading(getActiveWidget) {
     modal.showModal();
   }
 
-  function editPosition(row) {
+  async function editPosition(row) {
     const accountId = state.account.id;
+    const quote = await quoteForEdit(row.symbol, accountId);
     const modal = dialog(`SL/TP · ${row.symbol} · ${row.id}`);
     const form = element('form', null, { class: 'mt5-fields' });
-    const sl = field(form, 'Stop Loss', 'stopLoss', row.stopLoss);
-    const tp = field(form, 'Take Profit', 'takeProfit', row.takeProfit);
+    const options = { quote, side: row.side, reference: () => row.entryPrice };
+    const sl = editPriceField(form, 'Stop Loss', 'stopLoss', row.stopLoss, options);
+    const tp = editPriceField(form, 'Take Profit', 'takeProfit', row.takeProfit, options);
     const status = element('p', null, { role: 'status' });
     form.append(element('button', 'Kiểm tra thay đổi', { type: 'submit' }), button('Đóng', () => modal.close()));
     form.addEventListener('submit', event => {
       event.preventDefault();
-      review('modifyPosition', { positionId: row.id, stopLoss: sl.value ? Number(sl.value) : null, takeProfit: tp.value ? Number(tp.value) : null }, row.symbol, accountId)
+      review('modifyPosition', { positionId: row.id, stopLoss: sl(), takeProfit: tp() }, row.symbol, accountId, quote)
         .then(result => { if (result) modal.close(); }).catch(error => { status.textContent = error.message; });
     });
-    modal.append(element('p', 'Để trống để xóa mức SL/TP tương ứng.'), form, status); modal.showModal();
+    modal.append(element('p', `Pip tính từ Entry ${priceText(row.entryPrice, quote)}. Để trống ô để xóa mức SL/TP.`), form, status); modal.showModal();
   }
 
-  function editOrder(row) {
+  async function editOrder(row) {
     const accountId = state.account.id;
+    const quote = await quoteForEdit(row.symbol, accountId);
     const modal = dialog(`Sửa giá · ${row.symbol} · ${row.id}`);
     const form = element('form', null, { class: 'mt5-fields' });
-    const price = field(form, row.type === 'stopLimit' ? 'Giá Stop mới' : 'Giá mới', 'newPrice', row.stopPrice ?? row.price, { required: '' });
-    const limit = row.type === 'stopLimit' ? field(form, 'Giá Limit mới', 'limitPrice', row.price, { required: '' }) : null;
-    const sl = field(form, 'Stop Loss', 'stopLoss', row.stopLoss);
-    const tp = field(form, 'Take Profit', 'takeProfit', row.takeProfit);
+    const base = row.side === 'buy' ? 'Ask' : 'Bid';
+    const quotePrice = row.side === 'buy' ? quote.ask : quote.bid;
+    const entry = { quote, side: row.side, reference: () => quotePrice, required: true };
+    const price = editPriceField(form, row.type === 'stopLimit' ? 'Giá Stop mới' : 'Giá mới', 'newPrice', row.stopPrice ?? row.price, entry);
+    const limit = row.type === 'stopLimit' ? editPriceField(form, 'Giá Limit mới', 'limitPrice', row.price, entry) : null;
+    const exits = { quote, side: row.side, reference: limit ?? price };
+    const sl = editPriceField(form, 'Stop Loss', 'stopLoss', row.stopLoss, exits);
+    const tp = editPriceField(form, 'Take Profit', 'takeProfit', row.takeProfit, exits);
     const status = element('p', null, { role: 'status' });
     form.append(element('button', 'Kiểm tra thay đổi', { type: 'submit' }), button('Đóng', () => modal.close()));
     form.addEventListener('submit', event => {
       event.preventDefault();
-      review('modifyOrder', { orderId: row.id, newPrice: Number(price.value), previousPrice: row.stopPrice ?? row.price,
-        ...(limit ? { limitPrice: Number(limit.value) } : {}), stopLoss: sl.value ? Number(sl.value) : null,
-        takeProfit: tp.value ? Number(tp.value) : null }, row.symbol, accountId)
+      review('modifyOrder', { orderId: row.id, newPrice: price(), previousPrice: row.stopPrice ?? row.price,
+        ...(limit ? { limitPrice: limit() } : {}), stopLoss: sl(), takeProfit: tp() }, row.symbol, accountId, quote)
         .then(result => { if (result) modal.close(); }).catch(error => { status.textContent = error.message; });
     });
-    modal.append(form, status); modal.showModal();
+    modal.append(element('p', `Pip của giá đặt tính từ ${base} ${priceText(quotePrice, quote)} lúc mở phiếu. SL/TP tính từ Entry mới.`), form, status); modal.showModal();
   }
 
-  async function review(action, intent, symbol, accountId = state?.account.id) {
+  async function review(action, intent, symbol, accountId = state?.account.id, fallbackQuote) {
     if (busy || reviewOpen) throw new Error('Hãy hoàn tất hoặc hủy yêu cầu đang mở.');
+    const quote = state?.quotes[symbol] ?? fallbackQuote;
     if (action === 'place') { const issue = tradeIssue(intent, state?.quotes[symbol]); if (issue) throw new Error(issue); }
     if (action === 'modifyPosition') {
       const row = state?.positions.find(row => row.id === intent.positionId);
-      const issue = row && tradeIssue({ ...row, ...intent }, state?.quotes[symbol], 'position'); if (issue) throw new Error(issue);
+      const issue = row && tradeIssue({ ...row, ...intent }, quote, 'position'); if (issue) throw new Error(issue);
     }
     if (action === 'modifyOrder') {
       const row = state?.orders.find(row => row.id === intent.orderId);
       if (row) {
         const moved = { ...row, ...intent, price: row.type === 'stopLimit' ? intent.limitPrice ?? row.price : intent.newPrice,
           ...(row.type === 'stopLimit' ? { stopPrice: intent.newPrice } : {}) };
-        const issue = tradeIssue(moved, state?.quotes[symbol], 'order'); if (issue) throw new Error(issue);
+        const issue = tradeIssue(moved, quote, 'order'); if (issue) throw new Error(issue);
       }
     }
     const command = copy({ action, intent, symbol, account: accountId, requestId: uid() });
@@ -546,7 +587,7 @@ export function createMt5Trading(getActiveWidget) {
     entries.push({ label: `Mua Stop Limit tại ${price}…`, onSelect: () => void openTicket(owner, { side: 'buy', type: 'stopLimit', price, stopPrice: price }) },
       { label: `Bán Stop Limit tại ${price}…`, onSelect: () => void openTicket(owner, { side: 'sell', type: 'stopLimit', price, stopPrice: price }) });
     for (const order of state.orders.filter(row => row.symbol === symbol).slice(0, 6)) entries.push({
-      label: `Sửa giá / SL / TP lệnh ${order.id}…`, onSelect: () => editOrder(order),
+      label: `Sửa giá / SL / TP lệnh ${order.id}…`, onSelect: () => editOrder(order).catch(report),
     });
     return entries;
   }

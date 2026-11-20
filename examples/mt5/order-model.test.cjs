@@ -30,3 +30,18 @@ test('moving entry translates stops and a stop-limit trigger while retaining rew
   assert.equal(bracketSide('buy', 3800, 3790), 'stopLoss');
   assert.equal(bracketSide('sell', 3800, 3790), 'takeProfit');
 });
+
+test('pip offsets use the symbol size, preserve direction and round to the broker tick', async () => {
+  const { pipSize, priceFromUnit, valueInUnit } = await import('./order-model.js');
+  const gold = { tickSize: .001, digits: 3, pipSize: pipSize('XAUUSDm') };
+  assert.equal(gold.pipSize, .01);
+  assert.equal(pipSize('EURUSDm'), .0001);
+  assert.equal(pipSize('USDJPYm'), .01);
+  assert.equal(pipSize('UNKNOWN'), undefined);
+  assert.equal(priceFromUnit(-20, 'pips', 3800.01, 'buy', 'price', gold), 3799.81);
+  assert.equal(priceFromUnit(20, 'pips', 3800, 'sell', 'price', gold), 3800.2);
+  assert.equal(priceFromUnit(12.54, 'pips', 3800, 'sell', 'stopLoss', gold), 3800.125);
+  assert.equal(priceFromUnit(-50, 'pips', 3800, 'buy', 'stopLoss', gold), 3800.5);
+  assert.equal(valueInUnit(3800.5, 'pips', 3800, gold, 'buy', 'stopLoss'), -50);
+  assert.equal(valueInUnit(3799.81, 'pips', 3800.01, gold, 'buy', 'price'), -20);
+});
