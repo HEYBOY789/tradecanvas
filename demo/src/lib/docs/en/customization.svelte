@@ -25,7 +25,7 @@
     <tr><td>An indicator's lines, a pane's background</td><td><code>updateIndicatorStyle(id, {'{ plots }'})</code>, <code>setPaneStyle</code></td></tr>
     <tr><td>Which parts of the widget show</td><td><code>features</code> / <code>setFeatures</code> — <a href="#switches">below</a></td></tr>
     <tr><td>What users can do on the chart: draw, trade, zoom</td><td>The chart's own features: <code>chartOptions: {'{ features: { drawings: false } }'}</code></td></tr>
-    <tr><td>Buttons, menus and status items of your own</td><td><code>addToolbarButton</code>, <code>addToolbarDropdown</code>, <code>addSidebarButton</code>, <code>addStatusBarItem</code>, <code>getSlot</code>, the menu hooks — <a href="#parts">below</a></td></tr>
+    <tr><td>Buttons, menus and status items of your own</td><td><code>addToolbarButton</code>, <code>addToolbarDropdown</code>, <code>addSidebarButton</code>, <code>addStatusBarItem</code>, <code>getSlot</code>, the menu hooks — <a href="#parts">below</a>; a page in the dock, <code>addDockPage</code> — <a href={href('/docs/api#dock')}>API</a></td></tr>
     <tr><td>Keyboard shortcuts of your own</td><td><code>addHotkey</code> — <a href="#parts">below</a></td></tr>
     <tr><td>Your own CSS</td><td>The stable hooks: <code>--tcw-*</code>, <code>data-tcw-part</code> — <a href="#css">below</a></td></tr>
     <tr><td>The widget's words</td><td><code>locale</code>, <code>messages</code> — <a href="#words">below</a></td></tr>
@@ -91,7 +91,7 @@ grid.setFeatures({ toasts: false })  // every chart of a ChartWidgetGrid`}</code
       <code>orderTicket</code> <code>bracketOrders</code> <code>depthLadder</code> <code>layouts</code>
       <code>indicatorTemplates</code> <code>compare</code> <code>indicatorLegend</code> <code>navigation</code>
       <code>customTimeframes</code> <code>marks</code> <code>intervalTyping</code> <code>symbolTyping</code> <code>dragDropImport</code> <code>hotkeys</code>
-      <code>toasts</code>
+      <code>toasts</code> <code>favoritesBar</code>
     </td></tr>
     <tr><td>Toolbar</td><td>
       <code>toolbar.symbol</code> <code>toolbar.symbolInfo</code> <code>toolbar.timeframes</code>

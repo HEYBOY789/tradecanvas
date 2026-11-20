@@ -47,6 +47,24 @@ new ChartWidget(host, { chartOptions: { features: { tradingContextMenu: true } }
   what the position would make or lose there. Every price is on the axis too. Tags that would cover each other
   stand side by side, and the badges on the axis move apart. Drag a stop or a target by its line or by its tag.
 </p>
+<p>
+  A position with no stop-loss or no take-profit has an <strong>SL</strong> or a <strong>TP</strong> button on its
+  entry's tag. Press it and drag the new line where you want it, or just click to set it where it starts. A stop
+  starts 1% of the entry away and a target at twice the stop's distance, as a bracket does, and both start at
+  least 1% beyond the price now, so neither is hit the moment it is set. Letting go sends
+  <code>positionModify</code>, as dragging a stop does, so a connected execution adapter applies it.
+  <code>lineButtons: {'{'} addStops: false {'}'}</code> leaves the buttons out.
+</p>
+<p>
+  The positions, the orders and their fills can be hidden, and their lines locked. Hidden, none is drawn and none
+  can be pressed; they are still kept and still follow the execution adapter, and a bracket or an order being
+  placed still shows. Locked, no line or tag of theirs can be dragged, and a position offers no SL or TP to drag
+  out; their buttons (close, cancel, reverse, trail, remove a stop) still act. In the widget, the hide and lock
+  buttons' menus on the drawing sidebar do it.
+</p>
+<pre><code>{`chart.setTradingVisible(false)   // isTradingVisible()
+chart.setTradingLocked(true)     // isTradingLocked()
+chart.setIndicatorsVisible(ids, false)   // several indicators at once, one undo step`}</code></pre>
 
 <h2>Orders</h2>
 <pre><code>{`chart.setOrders([{
@@ -79,7 +97,8 @@ new ChartWidget(host, { chartOptions: { features: { tradingContextMenu: true } }
 
 chart.connectExecution(new PaperExecutionAdapter({ markPrice: 64_000 }))
 
-chart.on('executionError', (e) => toast(e.payload.message))
+chart.on('executionError', (e) => toast(e.payload.message))   // e.payload.command: the intent that failed
+// chart.connectExecution(adapter, { brackets: 'place' })   // a confirmed bracket goes to it too: see Bracket orders
 // chart.disconnectExecution()`}</code></pre>
 <p>
   Implement <code>ExecutionAdapter</code> (it mirrors <code>DataAdapter</code>) to wire a
@@ -203,6 +222,13 @@ chart.on('priceAxisAdd', (e) => openMyMenu(e.payload.x, e.payload.y, e.payload.p
   stop over the market becomes a sell limit), and Place takes the side's colour.
 </p>
 <p>
+  In the widget, a selected Long/Short Position drawing offers <b>Create order</b> in its toolbar while trading is on. It opens this ticket filled from
+  the drawing: its side, entry as the price, stop-loss and take-profit, and the
+  quantity its risk buys, taken down to the decimals the drawing writes. The
+  order type follows the entry against the market, and nothing is sent until
+  Place.
+</p>
+<p>
   The account panel's head keeps the open P&amp;L and the P&amp;L realised in sight on every tab. Its figures are
   set right in the mono type, money to the price step's decimals in the number locale; on a phone each row is a card
   of named figures.
@@ -235,8 +261,22 @@ chart.cancelOrderDraft()`}</code></pre>
   drag the three lines to tune entry, risk, and reward. Confirm with
   <kbd>Enter</kbd> (or the Place button), cancel with <kbd>Esc</kbd>. In the
   widget, the green/red toolbar arrows start a long/short bracket. The chart
-  emits a single <code>bracketPlace</code> event for your backend to act on —
-  it never places orders itself.
+  emits a single <code>bracketPlace</code> event for your backend to act on.
+</p>
+<p>
+  With an execution adapter connected with <code>brackets: 'place'</code>, the chart also sends it to the
+  adapter as one order: the entry, a limit when the price has to come back to it and a stop when it has to
+  run on to it, its quantity, and its stop-loss and take-profit on it. Once the adapter took it, the chart
+  sends <code>bracketOrder</code> with the order. If the adapter refuses it, it sends
+  <code>executionError</code> with <code>command: 'bracketPlace'</code>. The widget says "placed" only then,
+  and says why when it was refused. A bracket with no quantity is not sent, since no one saw a size to
+  place; nor is one confirmed before the chart has a price to tell a limit entry from a stop.
+  <code>executionError</code> gives the <code>reason</code> (<code>'noQuantity'</code>, <code>'noPrice'</code>).
+  The brackets the toolbar's arrows and <code>startBracket</code> start have no quantity yet, so with
+  <code>'place'</code> they are not sent, and the widget says so. Without it, a confirmed bracket stays an event, and
+  the widget says it was confirmed. An adapter connected without saying (no <code>brackets</code>) keeps the
+  event and warns once in the console. <code>'place'</code> becomes the default in the next major version,
+  so an app that places the event's bracket itself passes <code>brackets: 'event'</code>.
 </p>
 <pre><code>{`chart.startBracket('buy')          // entry defaults to the latest close
 chart.startBracket('sell', 64_800) // or pin the entry price
@@ -245,6 +285,11 @@ chart.on('bracketPlace', (e) => {
   const { side, entry, stopLoss, takeProfit, riskReward } = e.payload
   // submit to your OMS, then reflect fills back via chart.setOrders/setPositions
 })
+
+// Or let the connected adapter place it
+chart.connectExecution(broker, { brackets: 'place' })
+chart.placesBrackets()   // true
+chart.on('bracketOrder', (e) => console.log(e.payload.order.id))
 
 chart.confirmBracket()  // same as Enter
 chart.cancelBracket()   // same as Esc`}</code></pre>

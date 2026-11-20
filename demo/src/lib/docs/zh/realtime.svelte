@@ -179,7 +179,8 @@ const current = agg.getCurrentBar()         // forming bar`}</code></pre>
 <p>
   带有 <code>subscribeQuotes</code> 的数据源会同时推送多个品种的报价（最新价、当日涨跌、最高价、最低价、
   成交量、买价和卖价），直到你停止订阅。<code>BinanceAdapter</code> 先发送 24 小时快照，再接上它的 mini-ticker 流；
-  <code>MockAdapter</code> 会生成模拟报价。组件的自选列表就用它来填充各行。
+  <code>MockAdapter</code> 会生成模拟报价。组件的自选列表就用它来填充各行。没有报价时，图表自身品种的那一行从图表的 K 线读取价格和当日涨跌，
+  与品种信息面板相同：相对于最后一个交易日之前的收盘价，按交易所的时区计算；若 K 线中没有更早的一天，则不显示涨跌。
 </p>
 <pre><code>{`const stop = new BinanceAdapter().subscribeQuotes(['BTCUSDT', 'ETHUSDT'], (quotes) => {
   for (const q of quotes) console.log(q.symbol, q.last, q.changePercent)
@@ -297,7 +298,7 @@ chart.replayStop()             // back to the live series`}</code></pre>
 
 <h3>ChartWidget 中的回放栏</h3>
 <p>
-  工具栏的<strong>K线回放</strong>按钮会在主窗格底部、绘图区居中处打开一个紧凑的回放栏（下方窗格保持可读）。
+  工具栏的<strong>K线回放</strong>按钮会在图表下方、状态栏上方打开一条横跨整个组件的回放栏：图表会为它让出空间，成交量、下方窗格和时间轴都保持可见。
   先选择起点K线：点击它，或点<strong>随机K线</strong>；<strong>取消</strong>（或 <kbd>Esc</kbd>）退出。
   之后：后退、<strong>播放</strong>/<strong>暂停</strong>、前进；当前步的日期和时间，按显示时区（只在不是今年时显示年份），
   以及已播放部分填色的进度条；<strong>速度</strong>为 0.1× 到 50× 的倍数（1× 每秒播放图表的一根K线，与步长无关；默认 1×）；

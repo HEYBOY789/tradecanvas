@@ -187,7 +187,8 @@ const current = agg.getCurrentBar()         // forming bar`}</code></pre>
   <code>subscribeQuotes</code>가 있는 피드는 중지할 때까지 여러 종목의 시세(현재가, 당일 변동, 고가, 저가,
   거래량, 매수호가와 매도호가)를 한꺼번에 보냅니다. <code>BinanceAdapter</code>는 24시간 스냅샷을 보낸 뒤
   미니 티커 스트림을 이어 보내고, <code>MockAdapter</code>는 시세를 만들어 냅니다. 위젯의 관심 종목은 이것으로
-  각 행을 채웁니다.
+  각 행을 채웁니다. 시세가 없으면 차트 자신의 종목 행은 종목 정보 패널과 마찬가지로 차트의 봉에서 가격과 당일 변동을
+  읽습니다: 마지막 날 직전의 종가를 기준으로 거래소 시간대에서 계산하며, 봉에 그 전날이 없으면 변동을 표시하지 않습니다.
 </p>
 <pre><code>{`const stop = new BinanceAdapter().subscribeQuotes(['BTCUSDT', 'ETHUSDT'], (quotes) => {
   for (const q of quotes) console.log(q.symbol, q.last, q.changePercent)
@@ -310,7 +311,7 @@ chart.replayStop()             // back to the live series`}</code></pre>
 
 <h3>ChartWidget의 리플레이 바</h3>
 <p>
-  툴바의 <strong>바 리플레이</strong> 버튼은 메인 패널 아래쪽, 플롯 가운데에 작은 바를 엽니다(아래 패널은 그대로 읽힙니다).
+  툴바의 <strong>바 리플레이</strong> 버튼은 차트 아래, 상태 표시줄 위에 위젯 너비만큼의 바를 엽니다. 차트가 그만큼 자리를 비켜 주므로 거래량, 아래 패널, 시간 축이 계속 보입니다.
   먼저 시작 봉을 고릅니다. 봉을 클릭하거나 <strong>무작위 봉</strong>을 누르고, <strong>취소</strong>(또는 <kbd>Esc</kbd>)로 나갑니다.
   그다음: 뒤로, <strong>재생</strong>/<strong>일시정지</strong>, 앞으로; 표시 중인 단계의 날짜와 시간(표시 시간대, 올해가 아닐 때만 연도);
   재생한 부분이 채워진 트랙; <strong>속도</strong>는 0.1×~50× 배수(1×는 단계와 상관없이 차트 봉 하나를 1초에, 기본 1×);

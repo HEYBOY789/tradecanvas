@@ -47,6 +47,22 @@ new ChartWidget(host, { chartOptions: { features: { tradingContextMenu: true } }
   すべての価格は軸にも表示されます。重なりそうなタグは横に並び、軸のタグは互いにずれて表示されます。
   損切りや利確はラインでもタグでもドラッグできます。
 </p>
+<p>
+  損切りや利確のないポジションでは、建値のタグに <strong>SL</strong> または <strong>TP</strong> のボタンが付きます。
+  押して新しいラインを置きたい位置までドラッグするか、クリックだけで開始位置に設定します。損切りはエントリーから 1% の位置、
+  利確は損切りの 2 倍の距離から始まり（ブラケットと同じです）、どちらも現在価格から少なくとも 1% 先に置かれるので、
+  設定した瞬間に達することはありません。離すと損切りのドラッグと同じく <code>positionModify</code> が送られ、
+  接続した執行アダプターがそれを反映します。<code>lineButtons: {'{'} addStops: false {'}'}</code> でボタンを表示しません。
+</p>
+<p>
+  ポジション、注文、その約定は非表示にでき、その線はロックできます。非表示のときはどれも描画されず、押すこともできません。
+  それでも保持され、執行アダプターに従い続け、発注中のブラケットや注文は表示されます。ロックのときは、線もタグもドラッグできず、
+  ポジションから SL や TP を引き出すこともできません。ボタン（決済、取消、反転、トレール、ストップの削除）は使えます。
+  ウィジェットでは、描画サイドバーの非表示ボタンとロックボタンのメニューで行います。
+</p>
+<pre><code>{`chart.setTradingVisible(false)   // isTradingVisible()
+chart.setTradingLocked(true)     // isTradingLocked()
+chart.setIndicatorsVisible(ids, false)   // 複数のインジケーターをまとめて、1 回の元に戻す単位で`}</code></pre>
 
 <h2>注文</h2>
 <pre><code>{`chart.setOrders([{
@@ -77,7 +93,8 @@ new ChartWidget(host, { chartOptions: { features: { tradingContextMenu: true } }
 
 chart.connectExecution(new PaperExecutionAdapter({ markPrice: 64_000 }))
 
-chart.on('executionError', (e) => toast(e.payload.message))
+chart.on('executionError', (e) => toast(e.payload.message))   // e.payload.command: the intent that failed
+// chart.connectExecution(adapter, { brackets: 'place' })   // a confirmed bracket goes to it too: see Bracket orders
 // chart.disconnectExecution()`}</code></pre>
 <p>
   実際のブローカーや OMS と接続するには、<code>ExecutionAdapter</code> を実装します（<code>DataAdapter</code> と対になる構造です）：
@@ -193,6 +210,12 @@ chart.on('priceAxisAdd', (e) => openMyMenu(e.payload.x, e.payload.y, e.payload.p
   （市場より上の買い逆指値は売り指値になります）、発注ボタンは売買の色になります。
 </p>
 <p>
+  ウィジェットでは、トレーディングがオンの間、選択したロング/ショートポジションの描画のツールバーに <b>注文を作成</b> が表示されます。
+  押すと描画の内容を入れたこのチケットが開きます：売買の向き、価格としてのエントリー、損切りと利確、
+  そしてリスクに見合う数量（描画が書く小数桁数に切り捨て）です。注文の種類は市場価格に対するエントリーの位置で決まり、
+  発注を押すまで何も送られません。
+</p>
+<p>
   口座パネルの上部には、どのタブでも含み損益と確定損益が表示されます。数字は等幅書体で右揃え、
   金額は呼値の桁数と数値ロケールで書かれ、スマートフォンでは各行が項目名付きのカードになります。
 </p>
@@ -224,7 +247,21 @@ chart.cancelOrderDraft()`}</code></pre>
   エントリー、リスク、リワードを調整します。<kbd>Enter</kbd>（または「発注」ボタン）で確定し、
   <kbd>Esc</kbd> でキャンセルします。ウィジェットでは、ツールバーの緑 / 赤の矢印でロング / ショートの
   ブラケットを開始します。チャートはバックエンドが処理するための <code>bracketPlace</code> イベントを
-  1 つ発行するだけで、自ら注文を出すことはありません。
+  1 つ発行します。
+</p>
+<p>
+  <code>brackets: 'place'</code> を指定して執行アダプターを接続すると、チャートはそれを 1 つの注文としてアダプターにも送ります：
+  エントリー（価格が戻ってくる必要があれば指値、さらに進む必要があれば逆指値）、その数量、そして注文に付く損切りと利確です。
+  アダプターが受け付けると、チャートはその注文とともに <code>bracketOrder</code> を送ります。アダプターが拒否すると、
+  <code>command: 'bracketPlace'</code> 付きの <code>executionError</code> を送ります。ウィジェットが「発注しました」と表示するのは
+  受け付けられたときだけで、拒否されたときはその理由を表示します。数量のないブラケットは送られません（発注する数量を誰も
+  見ていないためです）。指値と逆指値のエントリーを区別する価格をチャートが持つ前に確定したものも送られません。
+  <code>executionError</code> は <code>reason</code>（<code>'noQuantity'</code>、<code>'noPrice'</code>）を返します。
+  ツールバーの矢印と <code>startBracket</code> で始めたブラケットにはまだ数量がないので、<code>'place'</code> では送られず、
+  ウィジェットがそう表示します。指定しなければ、確定したブラケットはイベントのままで、ウィジェットは確定したと表示します。
+  何も指定せずに（<code>brackets</code> なしで）接続したアダプターはイベントのままとし、コンソールで一度だけ警告します。
+  次のメジャーバージョンでは <code>'place'</code> が既定になるので、イベントのブラケットを自ら発注するアプリは
+  <code>brackets: 'event'</code> を渡してください。
 </p>
 <pre><code>{`chart.startBracket('buy')          // entry defaults to the latest close
 chart.startBracket('sell', 64_800) // or pin the entry price
@@ -233,6 +270,11 @@ chart.on('bracketPlace', (e) => {
   const { side, entry, stopLoss, takeProfit, riskReward } = e.payload
   // submit to your OMS, then reflect fills back via chart.setOrders/setPositions
 })
+
+// Or let the connected adapter place it
+chart.connectExecution(broker, { brackets: 'place' })
+chart.placesBrackets()   // true
+chart.on('bracketOrder', (e) => console.log(e.payload.order.id))
 
 chart.confirmBracket()  // same as Enter
 chart.cancelBracket()   // same as Esc`}</code></pre>
@@ -295,6 +337,8 @@ chart.setDepthOverlay({ mode: 'cumulative' })       // change the look later`}</
   時間がたっても残り続ける流動性の壁が浮かび上がります。設定シート（または
   <code>chart.setDepthHeatmapVisible</code>）で切り替えます。<code>widget.setDepth</code> は
   板が更新されるたびにスナップショットを記録します。
+  リプレイ中は、時刻なしで記録された板はライブ系列の最後の足に属し、ヒートマップはリプレイで表示済みの足の板だけを表示します。
+  プロット端の板（ライブ市場のもの）はリプレイが終わるまで隠れます。
 </p>
 <pre><code>{`chart.setDepthHeatmapVisible(true)
 chart.setDepthHeatmapConfig({ opacity: 0.7, capacity: 240 })

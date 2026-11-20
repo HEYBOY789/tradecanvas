@@ -1,6 +1,6 @@
 import type { ChartType, LineStyle } from '../types/chart.js';
 import type { Theme } from '../types/theme.js';
-import type { IndicatorPlotStyle } from '../types/indicator.js';
+import type { IndicatorMarkerShape, IndicatorPlotStyle } from '../types/indicator.js';
 import {
   CHART_STYLE_KEYS,
   type ChartStyleKey,
@@ -15,6 +15,13 @@ import { resolveVolumeColors } from '../constants/themes.js';
 import { lerpColor } from './color.js';
 
 const LINE_STYLES: readonly LineStyle[] = ['solid', 'dashed', 'dotted'];
+
+/** A mark's size, px across: what a style may set. */
+const MARK_SIZE_MIN = 2;
+const MARK_SIZE_MAX = 40;
+
+/** The shapes a markers plot draws, in the order a picker lists them. */
+export const INDICATOR_MARKER_SHAPES: readonly IndicatorMarkerShape[] = ['triangleUp', 'triangleDown', 'arrowUp', 'arrowDown', 'dot', 'square', 'diamond'];
 
 /** How much of the ink a crosshair tag's ground takes. */
 const CROSSHAIR_TAG_INK = 0.28;
@@ -106,16 +113,18 @@ export function readPaneStyle(raw: unknown): PaneStyle | null {
 /** A plot key as indicators name them: short, nothing odd in it. */
 const PLOT_KEY = /^[A-Za-z0-9_]{1,32}$/;
 
-/** Plot styles read from anywhere: by plot key, a dash style and whether it shows; undefined when none. */
+/** Plot styles read from anywhere: by plot key, a dash style, whether it shows, a mark's shape and size; undefined when none. */
 export function readIndicatorPlotStyles(raw: unknown): Record<string, IndicatorPlotStyle> | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
   const out: Record<string, IndicatorPlotStyle> = {};
   for (const [key, value] of Object.entries(raw)) {
     if (!PLOT_KEY.test(key) || typeof value !== 'object' || value === null) continue;
-    const { lineStyle, visible } = value as Record<string, unknown>;
+    const { lineStyle, visible, shape, size } = value as Record<string, unknown>;
     const plot: IndicatorPlotStyle = {
       ...(LINE_STYLES.includes(lineStyle as LineStyle) ? { lineStyle: lineStyle as LineStyle } : {}),
       ...(typeof visible === 'boolean' ? { visible } : {}),
+      ...(INDICATOR_MARKER_SHAPES.includes(shape as IndicatorMarkerShape) ? { shape: shape as IndicatorMarkerShape } : {}),
+      ...(size === 'auto' ? { size } : typeof size === 'number' && Number.isFinite(size) && size > 0 ? { size: Math.min(MARK_SIZE_MAX, Math.max(MARK_SIZE_MIN, size)) } : {}),
     };
     if (Object.keys(plot).length > 0) out[key] = plot;
   }
@@ -198,7 +207,12 @@ export function resolveChartTheme(base: Theme, chartType: ChartType, overrides: 
       price: { line: str('axis.price.lineColor', plain.axisLine), text: str('axis.price.textColor', plain.axisLabel) },
       time: { line: str('axis.time.lineColor', plain.axisLine), text: str('axis.time.textColor', plain.axisLabel) },
     },
-    legend: { text: str('legend.textColor', plain.text), label: str('legend.labelColor', plain.textSecondary) },
+    legend: {
+      text: str('legend.textColor', plain.text),
+      label: str('legend.labelColor', plain.textSecondary),
+      up: str('legend.upColor', series.up),
+      down: str('legend.downColor', series.down),
+    },
     watermark: { color: (o('watermark.color') as string | undefined) ?? null },
     lastPrice: {
       visible: (o('lastPrice.visible') as boolean | undefined) ?? true,
@@ -243,6 +257,16 @@ export function resolveChartTheme(base: Theme, chartType: ChartType, overrides: 
   };
 }
 
+/**
+ * The colours of a rise and a fall where a bar's values are read (the
+ * legend, the tooltips, the measure tool): the legend's keys, so a chart can
+ * hide its candles and keep them; the candles' on a theme without resolved
+ * looks.
+ */
+export function priceReadoutColors(theme: Theme): { up: string; down: string } {
+  return { up: theme.style?.legend.up ?? theme.candleUp, down: theme.style?.legend.down ?? theme.candleDown };
+}
+
 /** How each key that isn't the series' reads back from the resolved theme. */
 const READ_BACK: { [K in ChartStyleKey]?: (t: Theme, s: ResolvedChartStyle) => unknown } = {
   'background.color': (t) => t.background,
@@ -257,6 +281,8 @@ const READ_BACK: { [K in ChartStyleKey]?: (t: Theme, s: ResolvedChartStyle) => u
   'axis.time.textColor': (_t, s) => s.axis.time.text,
   'legend.textColor': (_t, s) => s.legend.text,
   'legend.labelColor': (_t, s) => s.legend.label,
+  'legend.upColor': (_t, s) => s.legend.up,
+  'legend.downColor': (_t, s) => s.legend.down,
   'watermark.color': (_t, s) => s.watermark.color,
   'lastPrice.visible': (_t, s) => s.lastPrice.visible,
   'lastPrice.upColor': (_t, s) => s.lastPrice.up,

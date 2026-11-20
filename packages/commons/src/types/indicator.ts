@@ -2,6 +2,7 @@ import type { DataSeries } from './ohlc.js';
 import type { ViewportState } from './rendering.js';
 import type { LineStyle } from './chart.js';
 import type { BuiltInIndicators } from './builtInIndicators.js';
+import type { Theme } from './theme.js';
 
 export type IndicatorPlacement = 'overlay' | 'panel';
 
@@ -26,8 +27,23 @@ export type IndicatorParamsFor<Id extends string> = Id extends BuiltInIndicatorI
   ? BuiltInIndicators[Id]['params']
   : IndicatorParamValues;
 
-/** How a plot is drawn. */
-export type IndicatorPlotKind = 'line' | 'histogram' | 'dots' | 'step';
+/**
+ * How a plot is drawn. `'markers'` marks the bars that have a value (a turn,
+ * a signal): a shape at the value, or above or below the bar (`position`).
+ * It is not a line: it gets no value in the legend, no tag on the axis and
+ * no column in an export.
+ */
+export type IndicatorPlotKind = 'line' | 'histogram' | 'dots' | 'step' | 'markers';
+
+/** The shape of a markers plot's marks. */
+export type IndicatorMarkerShape = 'dot' | 'triangleUp' | 'triangleDown' | 'arrowUp' | 'arrowDown' | 'square' | 'diamond';
+
+/**
+ * Where a markers plot puts its mark on a bar: at its value, above the
+ * bar's high or below its low. Above and below are read on the price pane;
+ * in a pane of its own a mark is at its value.
+ */
+export type IndicatorMarkerPosition = 'value' | 'aboveBar' | 'belowBar';
 
 /**
  * One series an indicator draws from a field of its output: a line, a
@@ -43,6 +59,10 @@ export interface IndicatorPlot {
   color: number;
   /** Default `'line'`. */
   kind?: IndicatorPlotKind;
+  /** For `kind: 'markers'`: the shape of its marks; default `'dot'`. */
+  shape?: IndicatorMarkerShape;
+  /** For `kind: 'markers'`: where a mark goes on its bar; default `'value'`. */
+  position?: IndicatorMarkerPosition;
   /**
    * Two-tone: drawn bar by bar in `color` or `downColor`, by the value's
    * sign (`'sign'`, zero counts as up) or by another output field that is
@@ -101,6 +121,12 @@ export interface IndicatorScale {
  */
 export type IndicatorInputKind = 'int' | 'number' | 'boolean' | 'choice' | 'source' | 'color' | 'text';
 
+/** One of a choice input's values, with the label shown for it. */
+export interface IndicatorInputOption {
+  value: string | number;
+  label: string;
+}
+
 /** How a parameter is edited. Types not described here are inferred from the default value. */
 export interface IndicatorInputSpec {
   /**
@@ -115,8 +141,13 @@ export interface IndicatorInputSpec {
   min?: number;
   max?: number;
   step?: number;
-  /** A choice among these values. */
-  options?: readonly (string | number)[];
+  /**
+   * A choice among these values: each a value, or a value with the label
+   * the settings dialog shows for it (`{ value: 'ema', label: 'EMA' }`), in
+   * your app's language. A plain value shows as the widget names it, else
+   * as it is.
+   */
+  options?: readonly (string | number | IndicatorInputOption)[];
   /**
    * A price source: `'close'`, `'hl2'`… or another indicator's line
    * (`'ind:<instanceId>:<key>'`). The indicator then reads it as `close`.
@@ -150,6 +181,18 @@ export interface IndicatorDescriptor {
    * of your own is taken to, and a built-in that doesn't say so is not.
    */
   readsExchangeTimeZone?: boolean;
+  /**
+   * The look it starts with: a style, or one for each theme the chart draws
+   * with (`(theme) => style`, the theme with the chart's style overrides on
+   * it), which an instance follows when the theme changes. Under the
+   * viewer's saved default (`chart.setIndicatorDefaults`) and an instance's
+   * own; a part it doesn't give comes from the chart (the series palette, a
+   * 1.5 px line). Its colours, line widths and opacity are read; a part of
+   * an instance still equal to what the theme gave counts as the theme's.
+   * What the theme gives is left out of a saved layout, so a layout opened
+   * in another theme takes that theme's look.
+   */
+  defaultStyle?: IndicatorStyleConfig | ((theme: Theme) => IndicatorStyleConfig);
 }
 
 /** The groups of the widget's indicator picker. */
@@ -209,21 +252,29 @@ export type OverlayScale = 'right' | 'left';
 
 /**
  * One plot's own look, by its key (`'signal'`, `'upper'`). Its colour and
- * width stay in `colors` and `lineWidths`; this adds its dash and whether it
- * shows. Plots drawn from the descriptor's `plots` follow it; an indicator
- * that draws itself keeps to its own look.
+ * width stay in `colors` and `lineWidths`; this adds its dash, whether it
+ * shows, and a markers plot's shape and size. Plots drawn from the
+ * descriptor's `plots` follow it; an indicator that draws itself keeps to
+ * its own look.
  */
 export interface IndicatorPlotStyle {
   lineStyle?: LineStyle;
   /** False: not drawn, and no value tag or legend value. */
   visible?: boolean;
+  /** A markers plot's shape, over the one its descriptor declares. */
+  shape?: IndicatorMarkerShape;
+  /**
+   * A markers plot's marks, in CSS pixels across (2 to 40). `'auto'` or
+   * unset: as wide as the bars allow, 4 to 8 px.
+   */
+  size?: number | 'auto';
 }
 
 export interface IndicatorStyleConfig {
   colors?: string[];
   lineWidths?: number[];
   opacity?: number;
-  /** Each plot's own dash and visibility, by its key. */
+  /** Each plot's own dash, visibility, and a mark's shape and size, by its key. */
   plots?: Record<string, IndicatorPlotStyle>;
 }
 
@@ -272,10 +323,21 @@ export interface IndicatorPlugin {
    * Indicators read from this one recompute from that far back.
    */
   revisesBefore?(config: IndicatorConfig): number;
+  /**
+   * Draws the instance. `context.theme` is the theme the chart draws with:
+   * colours and a font for what the style doesn't give (a mark where a line
+   * turns, a label).
+   */
   render(
     ctx: CanvasRenderingContext2D,
     output: IndicatorOutput,
     viewport: ViewportState,
     style: ResolvedIndicatorStyle,
+    context: IndicatorRenderContext,
   ): void;
+}
+
+/** What an indicator's `render` is given besides its values: the chart's theme. */
+export interface IndicatorRenderContext {
+  theme: Theme;
 }

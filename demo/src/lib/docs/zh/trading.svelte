@@ -46,6 +46,20 @@ new ChartWidget(host, { chartOptions: { features: { tradingContextMenu: true } }
   <strong>×</strong>；止损和止盈的标签显示价格到达那里时持仓的盈亏。每个价格也都标在价格轴上。会互相遮挡的标签并排显示，
   轴上的价格标签也会自动错开。拖动止损或止盈的线或其标签即可修改。
 </p>
+<p>
+  没有止损或没有止盈的持仓，其开仓价标签上有 <strong>SL</strong> 或 <strong>TP</strong> 按钮。按下它并把新线拖到想要的位置，
+  或者只是点击，让它留在起始位置。与括号单一样，止损从距开仓价 1% 处开始，止盈位于止损距离的两倍处，并且两者都至少在当前价格
+  之外 1% 开始，因此设置的那一刻都不会被触发。松开时会发出 <code>positionModify</code>，与拖动止损相同，由已连接的执行适配器应用。
+  <code>lineButtons: {'{'} addStops: false {'}'}</code> 可去掉这些按钮。
+</p>
+<p>
+  持仓、订单及其成交可以隐藏，它们的线也可以锁定。隐藏时，它们都不绘制、也无法点按；但仍会保留并继续跟随执行适配器，
+  正在下的括号单或订单仍会显示。锁定时，它们的线和标签都无法拖动，持仓也不再提供可拖出的 SL 或 TP；
+  它们的按钮（平仓、撤单、反手、跟踪、移除止损）仍然可用。在组件中，由画线侧边栏上隐藏和锁定按钮的菜单完成这些操作。
+</p>
+<pre><code>{`chart.setTradingVisible(false)   // isTradingVisible()
+chart.setTradingLocked(true)     // isTradingLocked()
+chart.setIndicatorsVisible(ids, false)   // 一次处理多个指标，一步撤销`}</code></pre>
 
 <h2>订单</h2>
 <pre><code>{`chart.setOrders([{
@@ -76,7 +90,8 @@ new ChartWidget(host, { chartOptions: { features: { tradingContextMenu: true } }
 
 chart.connectExecution(new PaperExecutionAdapter({ markPrice: 64_000 }))
 
-chart.on('executionError', (e) => toast(e.payload.message))
+chart.on('executionError', (e) => toast(e.payload.message))   // e.payload.command: the intent that failed
+// chart.connectExecution(adapter, { brackets: 'place' })   // a confirmed bracket goes to it too: see Bracket orders
 // chart.disconnectExecution()`}</code></pre>
 <p>
   实现 <code>ExecutionAdapter</code>（其结构与 <code>DataAdapter</code> 相对应），即可接入
@@ -190,6 +205,11 @@ chart.on('priceAxisAdd', (e) => openMyMenu(e.payload.x, e.payload.y, e.payload.p
   （高于市价的买入止损单会变为卖出限价单），下单按钮使用该方向的颜色。
 </p>
 <p>
+  在组件中，交易开启时，选中的多/空仓位画线会在其工具栏中提供 <b>创建订单</b>。它打开这个下单窗口，并按画线填好：
+  方向、以入场作为价格、止损和止盈，以及按其风险可买的数量（向下取到画线书写的小数位数）。订单类型由入场相对于市价的位置决定，
+  在按下“下单”之前不会发出任何东西。
+</p>
+<p>
   账户面板的顶部在每个标签页都显示浮动盈亏和已实现盈亏。数字以等宽字体右对齐，金额按最小价位的小数位数和数字区域格式书写；
   在手机上每一行是一张标明各项数字的卡片。
 </p>
@@ -219,8 +239,18 @@ chart.cancelOrderDraft()`}</code></pre>
   创建一个可拖动的括号单——入场价加上止损区和止盈区——然后
   拖动这三条线来调整入场、风险和收益。按 <kbd>Enter</kbd>（或“下单”按钮）确认，
   按 <kbd>Esc</kbd> 取消。在组件中，工具栏上的绿色 / 红色箭头分别创建做多 / 做空括号单。
-  图表只会发出一个 <code>bracketPlace</code> 事件，由你的后端处理——
-  它自己从不下单。
+  图表会发出一个 <code>bracketPlace</code> 事件，由你的后端处理。
+</p>
+<p>
+  若执行适配器以 <code>brackets: 'place'</code> 连接，图表还会把括号单作为一个订单发给适配器：入场（价格需要回到入场价时为限价单，
+  需要继续走到入场价时为止损单）、数量，以及挂在其上的止损和止盈。适配器接受后，图表发出带有该订单的 <code>bracketOrder</code>。
+  若适配器拒绝，则发出 <code>command: 'bracketPlace'</code> 的 <code>executionError</code>。组件只有在这之后才提示“已下单”，
+  被拒绝时则说明原因。没有数量的括号单不会发送，因为没有人看到要下的数量；在图表还没有价格、无法区分限价入场和止损入场之前确认的括号单
+  也不会发送。<code>executionError</code> 会给出 <code>reason</code>（<code>'noQuantity'</code>、<code>'noPrice'</code>）。
+  工具栏箭头和 <code>startBracket</code> 创建的括号单还没有数量，因此在 <code>'place'</code> 下不会发送，组件会提示这一点。
+  不使用它时，确认的括号单仍只是一个事件，组件提示它已确认。连接时未指定（没有 <code>brackets</code>）的适配器保留事件方式，
+  并在控制台警告一次。<code>'place'</code> 将在下一个大版本中成为默认值，因此自行处理事件中括号单的应用应传入
+  <code>brackets: 'event'</code>。
 </p>
 <pre><code>{`chart.startBracket('buy')          // entry defaults to the latest close
 chart.startBracket('sell', 64_800) // or pin the entry price
@@ -229,6 +259,11 @@ chart.on('bracketPlace', (e) => {
   const { side, entry, stopLoss, takeProfit, riskReward } = e.payload
   // submit to your OMS, then reflect fills back via chart.setOrders/setPositions
 })
+
+// Or let the connected adapter place it
+chart.connectExecution(broker, { brackets: 'place' })
+chart.placesBrackets()   // true
+chart.on('bracketOrder', (e) => console.log(e.payload.order.id))
 
 chart.confirmBracket()  // same as Enter
 chart.cancelBracket()   // same as Esc`}</code></pre>
@@ -289,6 +324,8 @@ chart.setDepthOverlay({ mode: 'cumulative' })       // change the look later`}</
   各价位上的挂单量会被点亮（买单为绿色，卖单为红色）。长时间存在的流动性墙会格外醒目。
   可在设置面板中切换（或调用 <code>chart.setDepthHeatmapVisible</code>）；
   每次订单簿更新时，<code>widget.setDepth</code> 都会记录一个快照。
+  回放期间，未带时间记录的订单簿归属于实时序列的最后一根K线；热力图只显示回放已经展示过的K线的订单簿，
+  而绘图区边缘的订单簿（属于实时行情）会隐藏，直到回放结束。
 </p>
 <pre><code>{`chart.setDepthHeatmapVisible(true)
 chart.setDepthHeatmapConfig({ opacity: 0.7, capacity: 240 })

@@ -187,6 +187,12 @@ import { detectCandlePatterns, CANDLE_PATTERNS } from '@tradecanvas/chart'
 const found = detectCandlePatterns(bars, { patterns: ['bullishEngulfing', 'hammer'] })
 // [{ index, time, pattern: { id, name, short, direction, kind, bars } }]
 CANDLE_PATTERNS.length                                 // 64`}</code></pre>
+<p>
+  패턴만 찾고 차트는 그리지 않는 페이지(스캐너, 스크리너)는 두 가지를 <code>@tradecanvas/core/patterns</code>에서
+  import합니다. 검출기만 담긴 gzip 약 4 kB의 별도 청크라서, 앱의 다른 페이지가 차트를 쓰더라도 이 페이지는 차트 엔진을
+  불러오지 않습니다. import하려면 앱의 의존성에 <code>@tradecanvas/core</code>를 추가하세요.
+</p>
+<pre><code>{`import { detectCandlePatterns, CANDLE_PATTERNS } from '@tradecanvas/core/patterns'`}</code></pre>
 
 <h2>나만의 지표</h2>
 <p>
@@ -213,7 +219,12 @@ CANDLE_PATTERNS.length                                 // 64`}</code></pre>
   period: { kind: 'int', min: 2, max: 500 },
   mult: { kind: 'number', min: 0.1, step: 0.1 },
   source: { source: true },
+  type: { kind: 'choice', options: [{ value: 'ema', label: 'Exponential' }, { value: 'sma', label: 'Simple' }] },
 }`}</code></pre>
+<p>
+  선택 입력의 <code>options</code>는 값이거나, 설정에 그 값 대신 보일 레이블을 붙인 값
+  (<code>{'{ value, label }'}</code>)이며, 레이블은 앱의 언어로 적습니다. 지표에는 값이 전달됩니다.
+</p>
 <p>
   디스크립터는 플롯의 모양도 밝히고, 차트는 그대로 그립니다. <code>fills</code>는 두 플롯에 모두 값이 있는
   곳에서 그 사이를 선 아래에 칠합니다. 플롯의 <code>width</code>는 지표의 굵기와 상관없이 그 굵기를
@@ -228,6 +239,17 @@ CANDLE_PATTERNS.length                                 // 64`}</code></pre>
   { key: 'lower', title: 'Lower', color: 0 },
 ],
 fills: [{ between: ['upper', 'lower'], color: 0, opacity: 0.1 }],`}</code></pre>
+<p>
+  <code>kind: 'markers'</code> 플롯은 해당 필드에 값이 있는 봉(전환점, 신호)에 <code>shape</code>
+  (<code>'dot'</code>, <code>'triangleUp'</code> 또는 <code>'triangleDown'</code>)으로 표시를 그립니다. 위치는 그 값이며,
+  가격 패널에서는 봉의 고가 위나 저가 아래에 둘 수도 있습니다(<code>position: 'aboveBar'</code>, <code>'belowBar'</code>).
+  읽을 값이 아니므로 범례에 값이 없고, 축에 태그가 없고, 내보내기에 열이 없으며, 다른 지표가 읽을 수 있는 선으로도
+  제공되지 않습니다. 별도 패널에서는 표시가 그 값의 위치에 그려집니다. 표시가 없는 봉에서는 필드를 비워 두세요.
+</p>
+<pre><code>{`plots: [
+  { key: 'value', title: 'MACD', color: 0 },
+  { key: 'turn', title: 'Turn', color: 1, kind: 'markers', shape: 'triangleUp', position: 'belowBar' },
+],`}</code></pre>
 
 <h2>패널: 크기 조절, 접기, 최대화, 순서 바꾸기</h2>
 <p>

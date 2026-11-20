@@ -168,7 +168,7 @@ chart.setTimeFormatter((time, { kind, timeZone }) =>
 
 <h3 id="axis-labels">軸がラベルを選ぶ仕組み</h3>
 <p>
-  時間軸は最も大きな暦の区切りを始めるバーにラベルを付けます：年（太字）、月、日、きりのよい時刻で、互いに少なくとも 80 px 離れます。そのため 5Y では <code>2022 · Jul · 2023</code>、1 か月では <code>Oct · 8 · 15</code>、1 日の中では <code>12:00 · 18:00</code> と読めます。ラベルは画面ではなくバーに属します：パンするとバーと一緒に動き、前に履歴を読み込んでも位置は変わりません。最も古いバーの左にはありません。月名は <code>setNumberLocale</code> に従い、グリッド線はラベルの位置に引かれます。
+  時間軸は最も大きな暦の区切りを始めるバーにラベルを付けます：年（太字）、月、日、きりのよい時刻で、互いに少なくとも 80 px 離れます。そのため 5Y では <code>2022 · Jul · 2023</code>、1 か月では <code>Oct · 8 · 15</code>、1 日の中では <code>12:00 · 18:00</code> と読めます。ラベルは画面ではなくバーに属します：パンするとバーと一緒に動き、前に履歴を読み込んでも位置は変わりません。最も古いバーの左にはありません。新しい年のラベルがないときは、右端のタイムゾーンのタグと同じスタイルのタグが左端に付き、表示中の最初のバーの時点で、ラベルが省いたものを書きます：月が並ぶときは年、日が並ぶときは <code>Mar 2023</code>、1 日の時刻が並ぶときは日付全体です。左端のラベルに重なるときはそのラベルの代わりになり、その内容も書きます（<code>Mar</code> の上なら <code>Mar 2023</code>）。履歴をさかのぼってパンしても、年は常に軸に表示されます。月名は <code>setNumberLocale</code> に従い、グリッド線はラベルの位置に引かれます。
 </p>
 <p>
   価格軸は高さに収まるだけのラベルを、少なくとも 30 px 離して、市場の呼値の単位に置きます。対数軸では刻みが価格とともに大きくなるので、上と同じように下にもラベルが付きます。パーセントや指数の軸では、基準からのきりのよいパーセントや指数ポイントになります。インジケーターのペインも自分の高さでラベル数を決めます。
@@ -529,7 +529,11 @@ widget.destroy()`}</code></pre>
     </td></tr>
     <tr><td>描画ツール</td><td>
       各グループのメニューにはツールのショートカット（Alt+T でトレンドライン）が書かれ、各行の星でそのツールを上部に固定できます。
-      下部には、描画スタイル、マグネット、消しゴム、範囲ズーム、描画モードの維持、すべてロック、すべて非表示、そしてゴミ箱ボタンがあります。ゴミ箱のメニューは描画、インジケーター、またはその両方を、それぞれの数を示して 1 回の元に戻す単位で削除します。
+      下部には、描画スタイル、マグネット、消しゴム、範囲ズーム、描画モードの維持、ロック、非表示、そしてゴミ箱ボタンがあります。ゴミ箱のメニューは描画、インジケーター、またはその両方を、それぞれの数を示して 1 回の元に戻す単位で削除します。
+      マグネット、ロック、非表示のボタンには角にメニューがあります（右クリックや矢印キーでも開きます）。マグネットのメニューは弱か強を選び、
+      ボタンはその強さでマグネットをオンにし、またオフにします。ロックのメニューは描画、ポジションと注文、またはすべてをロックし、
+      非表示のメニューは描画、インジケーター、ポジションと注文、またはすべてを非表示にし、非表示の項目にチェックを付けます。
+      メニューで選んだものが、以後ボタンの動作になります。インジケーターを非表示にすると表示中のものだけが隠れ、再表示ではそれだけが戻ります。
     </td></tr>
     <tr><td>ステータスバー</td><td>
       表示期間のプリセットと日付へ移動。市場の状態、接続、表示タイムゾーンの時計（クリックすると選べるタイムゾーンの一覧が開きます）、
@@ -561,9 +565,29 @@ widget.destroy()`}</code></pre>
   <strong>ⓘ</strong> から開き、どのパネルも自分のコードから開けます。<code>ChartWidgetGrid</code> のチャートには
   それぞれのレールはありません。ただし、その <code>widget.features</code> で <code>dock</code> をオンにすれば表示されます。
 </p>
-<pre><code>{`widget.openPanel('watchlist')   // 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder'; false if not there
+<p>
+  <code>addDockPage</code> を使うと、独自のページを同じドックに置けます：そのボタンはレール上で組み込みのボタンの後に並び、
+  要素はドックのヘッダー（ラベルと閉じるボタン）の下に、ウィジェットの <code>--tcw-*</code> トークンで表示されます。
+  <code>openPanel(id)</code> で開き、<code>getOpenPanel()</code> がそれを返し、<code>onShow</code> は開くたびに、
+  サイズが決まった後で呼ばれます。<code>remove()</code> はページを取り除き、開いていれば先に閉じます。スマートフォンでは
+  組み込みのパネルと同じくレールがないので、独自のコントロールから開いてください。組み込みのパネルや別のページと同じ id では
+  <code>null</code> が返ります。<code>onPanelChange</code> オプションには、どのように変わったか（レール、閉じるボタン、
+  自分のコード、ウィジェットが狭くなったこと）にかかわらず、開いているパネルの id か <code>null</code> が渡されます。
+</p>
+<pre><code>{`widget.openPanel('watchlist')   // 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder', or a page's id; false if not there
 widget.getOpenPanel()           // the panel open, or null
 widget.closePanel()
+
+const figures = document.createElement('div')
+const page = widget.addDockPage({
+  id: 'figures', label: 'Key figures', icon: 'info', element: figures,   // icon: a built-in name or an <svg> of yours
+  onShow: () => drawFigures(figures, widget.getSymbol()),
+  onHide: () => {},
+})
+widget.openPanel('figures')
+page.remove()
+
+new ChartWidget(host, { onPanelChange: (panel) => keepOpenPanel(panel) })   // 'figures', 'watchlist'… or null
 
 new ChartWidget(host, { features: { dock: false } })              // no rail: the toolbar opens the panels
 new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button for the data window`}</code></pre>
@@ -574,7 +598,8 @@ new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button 
   またはチャート上での文字の入力で開き、入力した文字から検索が始まります。何も入力していないうちは <code>symbols</code> の一覧を表示し、
   入力すると、入力が止まるたびにフィードの検索（<code>searchSymbols</code>、またはアダプターの検索）に問い合わせます。各行の先頭には
   バッジ（シンボルのロゴ、なければティッカーの頭文字を種類の色で）があり、続いてシンボル、名称、種類、取引所が列に並び、
-  チャートのシンボルには印が付きます。タブで 1 つの種類（株式、暗号資産）に絞り込め、入力中もタブは動きません。行が 2 つ以上の
+  チャートのシンボルには印が付きます。スマートフォンでは取引所がティッカーの下に入るので、長い名前（SIMULATED、ALL VENUES）も
+  切れずに読め、2 つの取引所の行を見分けられます。タブで 1 つの種類（株式、暗号資産）に絞り込め、入力中もタブは動きません。行が 2 つ以上の
   取引所にまたがると、横のリストで 1 つの取引所に絞り込めます。どちらも手元の行を絞り込むだけで、検索し直しはしません。検索が返すのは
   結果の 1 ページ分（アダプターの検索には 50 件を求めます）なので、<code>V</code> と入力して HNX を選ぶと、その中の HNX の銘柄が
   表示され、V を含むすべての HNX 銘柄ではありません。一覧に出るのは上位 200 行までで、その下の 1 行が、入力で絞り込める残りの件数を示します。
@@ -594,6 +619,18 @@ new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button 
     'FPT',   // 従来どおりティッカーだけ
   ],
 })`}</code></pre>
+<p>
+  シンボルに <code>last</code> の価格とその日の <code>changePercent</code> があれば（<code>symbols</code> で渡しても、
+  検索結果に含めても）、行の末尾にそれぞれの列で表示されます（スマートフォンでは騰落率が価格の下）。騰落率は上昇か下落の色です。
+  並んだ行のどれにもどちらもなければ、これらの列は省かれます。数値はシンボルの <code>pricePrecision</code> の桁数、
+  なければ値の大きさに応じた桁数で、ウィジェットの数値ロケールで書かれます。文字列はそのまま書かれます。ウィジェットは
+  これらをどれも取得しません。アプリが手元にあるものを渡します。検索の数値は、その結果が表示されている間だけ表示され、
+  次に検索を開いたときには残りません。
+</p>
+<pre><code>{`widget.setSymbols([
+  { symbol: 'BTCUSDT', exchange: 'Binance', last: 61668.46, changePercent: 0.37 },
+  { symbol: 'VCB', exchange: 'HOSE', last: 61.2, pricePrecision: 2, changePercent: -0.65 },
+])`}</code></pre>
 <p>
   <code>logo</code> には <code>https:</code> か <code>http:</code> のアドレス、サイト上のパス、<code>blob:</code> URL、
   または <code>data:</code> で書いた画像（PNG、JPEG、GIF、WebP、AVIF、SVG）を指定します。それ以外は無視されます。
@@ -915,6 +952,12 @@ widget.toggleSymbolInfo(true)`}</code></pre>
 <pre><code>{`new ChartWidget(host, {
   drawingFavorites: ['trendLine', 'horizontalLine', 'fibRetracement', 'rectangle'],
 })`}</code></pre>
+<p>
+  サイドバーの星ボタンを押すと、固定したツールがチャートの上に浮かぶ<strong>お気に入りツールバー</strong>として表示されます。
+  つまみをドラッグしてチャートの好きな場所に置き、ツールを押して選び、右クリックで固定を外します。表示の有無と置いた位置は
+  このブラウザに保存され、ページ内のウィジェットで共通の設定です。表示中はサイドバーの固定ツール列が隠れます。スイッチがオフのときは
+  固定したツールは列に残ります。最初はチャート上端の中央に表示されます。<code>{`features: { favoritesBar: false }`}</code> でバーとそのボタンを外せます。
+</p>
 
 <h3>描画スタイルとテンプレート</h3>
 <p>
@@ -951,7 +994,7 @@ chart.removeIndicator(instanceId)`}</code></pre>
   文字を書くツールのテキスト、座標（チャートのタイムゾーンで表した各点）、表示（描画を表示する時間足）で、
   下部にはテンプレートメニュー、キャンセル、OK があります。描画を右クリックするとメニューが開き、
   設定、ラインへのアラート、順序、グループ化、ロック、非表示、複製、削除を選べます。
-  サイドバーには消しゴム、ズームツール、そしてオフ・弱・強を切り替えられるマグネットもあります。
+  サイドバーには消しゴム、ズームツール、そしてメニューで弱か強を選べるマグネットもあります。
   土台となる API は
   <a href={href('/docs/drawing-tools')}>描画ツール</a>を参照してください。
 </p>

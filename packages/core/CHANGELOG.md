@@ -1,5 +1,65 @@
 # @tradecanvas/core
 
+## 2.16.0
+
+### Minor Changes
+
+- d494334: An equity curve's levels too close for both tags at the axis move their tags apart, each as little as it can, where one was drawn over the other; when there is no room for them all, the lowest levels' are left out. A level's `labelAt: 'start'` writes its name at the line's left end, away from the curve's latest point; `'end'`, the right, is the default. Names in the plot keep clear of each other: a level's goes under its line when another name is over it, and a band's moves down its band past a level's.
+
+### Patch Changes
+
+- 22bb51b: The price axis is as wide as the indicator panes' labels and tags need, not the prices' alone: a pane of millions under prices of tens of thousands had its last value's tag cut and the tick under it hidden. The axis refits when the panes' tags are turned on or off.
+- Updated dependencies [d494334]
+- Updated dependencies [7b396bc]
+- Updated dependencies [bfde7a3]
+  - @tradecanvas/commons@2.16.0
+
+## 2.15.0
+
+### Minor Changes
+
+- df27329: `EquityCurveChart` draws levels and bands. `levels` are lines across the plot at fixed values, each with its value in a tag at the axis and an optional `label`, `color` and `dash`. `bands` are tinted stretches of values under the curve, with an optional `label` and `color`. The value scale widens to show them unless `fitLevels: false`, and `setOptions` changes them without making the chart again.
+- c105460: A position with no stop-loss or no take-profit can be given one on the chart. Its entry's tag has an **SL** or a **TP** button: press it and drag the new line where you want it, or just click to set it where it starts. A stop starts 1% of the entry away and a target at twice the stop's distance, both at least 1% beyond the price now. Letting go sends `positionModify`, as dragging a stop does, so a connected execution adapter applies it. Before, a position opened without them, or whose stop was removed with its ×, could get one back only from code. `lineButtons: { addStops: false }` leaves the buttons out.
+- 0f66f7f: `positionLevels(drawing)` reads a Long/Short Position drawing as a trade: its side (`'buy'` for a long), entry, stop-loss, take-profit, and the quantity its risk buys, unrounded, with the decimals the drawing writes it in, the money at risk and to gain, and the R:R. It gives `null` for any other drawing, for a position whose stop is still on its entry, for one with no risk set, and for prices that are not finite, so a result is always an order that can be placed. An app that places an order from the drawing gets the numbers its tags show, without working them out from the anchors and options again. The `PositionLevels` type is exported with it.
+- c977b58: The Long/Short Position drawing has a fourth handle, its right edge on the entry line, which sets how long the trade runs; the stop, the target and the entry sit on the entry's edge, and the stop's handle changes only its price. Over the bars in its span it plays the trade out: entered on the first bar at or after the entry, closed where the price first reaches the stop or the target (the stop when one bar reaches both; a bar's open when it gaps past a level), at its right edge, or still open at the last bar. The part it went through is tinted in the colour of what it made, with a dashed line from the entry to the close and a tag there: `Target hit`, `Stop hit`, `Closed` or `Open`, with the profit or loss. It is on for positions already drawn too; the `showOutcome` option turns it off. It is played on the series' own prices, and left out for a box drawn back from its entry and on chart types whose bars are not the series' (Renko and the like). Saved drawings keep their place: the second anchor still holds the stop's price and the right edge's time.
+- c9379d6: The drawing sidebar's magnet, lock and hide buttons each have a menu, opened from their corner, a right click or an arrow key:
+
+  - **Hide:** the drawings, the indicators, the positions and orders, or all. What is hidden is ticked.
+  - **Lock:** the drawings, the positions and orders, or all.
+  - **Magnet:** weak or strong. The magnet button now turns the magnet on at the strength last chosen, and off; before, it cycled through off, weak and strong.
+
+  What a menu picks is what its button does from then on, and the button is named after it. Hiding the indicators hides the ones that showed, and showing them brings back those only.
+
+  New on `Chart`:
+
+  - `setTradingVisible(visible)` / `isTradingVisible()`: hides the positions, orders and fills. None is drawn or can be pressed, and they still follow the execution adapter.
+  - `setTradingLocked(locked)` / `isTradingLocked()`: no line or tag of theirs can be dragged. Their buttons still act.
+  - `setIndicatorsVisible(ids, visible)`: one undo step for several indicators.
+
+### Patch Changes
+
+- 5732771: The time axis says which year is on view when no new year is labelled there: panned back into history, it read "Mar … Apr" with no year until a January came on view. A tag at the left end, in the style of the timezone tag at the right, writes what the labels leave out, as of the first bar on view: the year among months, the month and year among days, the whole date among the times of one day. Over a label at the left end it stands in for it and says what it said ("Mar 2023" over "Mar"). It is left out where a year is labelled, and when the labels come from your own `timeFormatter`.
+- Updated dependencies [1d30fff]
+- Updated dependencies [df27329]
+- Updated dependencies [c105460]
+  - @tradecanvas/commons@2.15.0
+
+## 2.14.0
+
+### Minor Changes
+
+- 94a5466: A choice input's `options` take `{ value, label }` as well as plain values: the indicator settings dialog and the legend show the label, and the indicator is given the value. `describeInputs()` gives the labels as `optionLabels`.
+- fe4a897: A custom indicator's colours can follow the theme: its descriptor takes `defaultStyle`, a style or a function of the theme (`(theme) => ({ colors: … })`). An instance on it changes with `chart.setTheme()`, a colour someone picks for it stays, and it sits under the viewer's saved default (`chart.setIndicatorDefaults()`). A saved layout and the widget's _Save as default_ leave out what the theme gives. An indicator's `render` is also given `{ theme }`, the theme the chart draws with, as its fifth argument.
+- 433f450: A plot of `kind: 'markers'` marks the bars where its field has a value: a `shape` (`'dot'`, `'triangleUp'`, `'triangleDown'`) at the value, or above the bar's high or below its low on the price pane (`position: 'aboveBar' | 'belowBar'`). It gets no value in the legend, no tag on the price axis, no column in the CSV export and no place in the data window, and is not offered as a line another indicator can read.
+
+### Patch Changes
+
+- 465101e: The MCP server's `custom_indicator` tool gives the guide to writing an indicator of your own: the descriptor, `calculate`, the incremental `update` and `revisesBefore`, drawing with the theme, colours by theme, registering it before a saved layout is read, and what the chart reads off the descriptor, with code type-checked against the packages. `IndicatorBase.render` takes the render context, so an override can pass it on, and `IndicatorRenderContext` is exported from `@tradecanvas/chart`.
+- Updated dependencies [94a5466]
+- Updated dependencies [fe4a897]
+- Updated dependencies [433f450]
+  - @tradecanvas/commons@2.14.0
+
 ## 2.13.1
 
 ### Patch Changes

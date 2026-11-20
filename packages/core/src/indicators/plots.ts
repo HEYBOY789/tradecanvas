@@ -1,8 +1,10 @@
 import type {
   IndicatorDescriptor,
   IndicatorFill,
+  IndicatorMarkerShape,
   IndicatorOutput,
   IndicatorPlot,
+  IndicatorPlotStyle,
   IndicatorValue,
   ResolvedIndicatorStyle,
   ViewportState,
@@ -15,9 +17,33 @@ import { breaksBetween } from './periods.js';
 /** Room left above and below the values in an auto-fitted pane, as a share of their span. */
 const PANE_PADDING = 0.1;
 
-/** The output fields an indicator draws; null = every field (no `plots` declared). */
-export function drawnKeys(descriptor: Pick<IndicatorDescriptor, 'plots'>): readonly string[] | null {
-  return descriptor.plots ? descriptor.plots.map((p) => p.key) : null;
+/** Whether a plot marks bars (`kind: 'markers'`) instead of drawing a value through them. */
+export function isMarkerPlot(plot: IndicatorPlot): boolean {
+  return plot.kind === 'markers';
+}
+
+/** The plots that show values: every one but markers. Legends, axis tags, exports and line sources list these. */
+export function valuePlots(plots: readonly IndicatorPlot[]): IndicatorPlot[] {
+  return plots.filter((plot) => !isMarkerPlot(plot));
+}
+
+/**
+ * Where a markers plot's marks go: its `position` on the price pane, at the
+ * value anywhere else (a pane's scale is not prices).
+ */
+export function markerPosition(plot: IndicatorPlot, pricePane: boolean): 'value' | 'aboveBar' | 'belowBar' {
+  return pricePane ? plot.position ?? 'value' : 'value';
+}
+
+/**
+ * The output fields an indicator draws on its scale; null = every field (no
+ * `plots` declared). On the price pane, marks above or below the bars sit on
+ * the bars, not on the scale, and are left out; in a pane they are at their
+ * values and count.
+ */
+export function drawnKeys(descriptor: Pick<IndicatorDescriptor, 'plots'>, pricePane = true): readonly string[] | null {
+  if (!descriptor.plots) return null;
+  return descriptor.plots.filter((p) => !isMarkerPlot(p) || markerPosition(p, pricePane) === 'value').map((p) => p.key);
 }
 
 /** Whether a two-tone plot is drawn in its up colour at `val`. */
@@ -193,6 +219,8 @@ export function renderPlots(
   style: ResolvedIndicatorStyle,
   plots: readonly IndicatorPlot[],
   fills: readonly IndicatorFill[] = [],
+  /** Drawn on the price pane: marks above and below the bars read their highs and lows. Default true. */
+  pricePane = true,
 ): void {
   const series = output.series;
   if (!series) return;
@@ -224,6 +252,7 @@ export function renderPlots(
         const take = (val: IndicatorValue) => up === null || isUpTone(plot, val) === up;
         if (kind === 'histogram') drawHistogram(ctx, series, plot.key, from, to, viewport, toY, color, take);
         else if (kind === 'dots') drawDots(ctx, series, plot.key, from, to, viewport, toY, color, take);
+        else if (kind === 'markers') drawMarkers(ctx, output, series, plot, style.plots?.[plot.key], from, to, viewport, toY, color, take, pricePane);
         else drawPath(ctx, series, plot.key, from, to, viewport, toY, color, width, kind === 'step', up === null ? null : take, dash, breaks);
       }
     } finally {
@@ -342,6 +371,106 @@ function drawPath(
     hasPrev = true;
   }
   pen.finish();
+}
+
+/** A mark's size across, in CSS pixels, before it is fitted to the bars. */
+const MARKER_SIZE = 8;
+/** The smallest a mark gets when bars are close together. */
+const MIN_MARKER_SIZE = 4;
+/** The room between a mark and the bar it sits above or below. */
+const MARKER_GAP = 3;
+/** The sizes a mark's own size is kept within, px across. */
+const MARKER_SIZE_RANGE = [2, 40] as const;
+/** A square's side and an arrow's shaft, against the mark's size: they look as heavy as a triangle. */
+const SQUARE_SIDE = 0.8;
+const SHAFT_WIDTH = 0.4;
+
+/** A mark's size: its style's, kept within reason, else as wide as the bars allow. */
+function markerSize(own: IndicatorPlotStyle | undefined, viewport: ViewportState): number {
+  const set = own?.size;
+  if (typeof set === 'number' && Number.isFinite(set)) return Math.min(MARKER_SIZE_RANGE[1], Math.max(MARKER_SIZE_RANGE[0], set));
+  return Math.max(MIN_MARKER_SIZE, Math.min(MARKER_SIZE, viewport.barWidth + viewport.barSpacing));
+}
+
+/** One mark's outline, centred at (x, y), `half` its half size, added to the path. */
+function traceMark(ctx: CanvasRenderingContext2D, shape: IndicatorMarkerShape, x: number, y: number, half: number): void {
+  if (shape === 'dot') {
+    ctx.moveTo(x + half, y);
+    ctx.arc(x, y, half, 0, Math.PI * 2);
+    return;
+  }
+  if (shape === 'square') {
+    const s = half * SQUARE_SIDE;
+    ctx.moveTo(x - s, y - s);
+    ctx.lineTo(x + s, y - s);
+    ctx.lineTo(x + s, y + s);
+    ctx.lineTo(x - s, y + s);
+  } else if (shape === 'diamond') {
+    ctx.moveTo(x, y - half);
+    ctx.lineTo(x + half, y);
+    ctx.lineTo(x, y + half);
+    ctx.lineTo(x - half, y);
+  } else if (shape === 'arrowUp' || shape === 'arrowDown') {
+    // A head over the near half, a shaft down the far one.
+    const dir = shape === 'arrowUp' ? -1 : 1;
+    const shaft = half * SHAFT_WIDTH;
+    ctx.moveTo(x, y + dir * half);
+    ctx.lineTo(x + half, y);
+    ctx.lineTo(x + shaft, y);
+    ctx.lineTo(x + shaft, y - dir * half);
+    ctx.lineTo(x - shaft, y - dir * half);
+    ctx.lineTo(x - shaft, y);
+    ctx.lineTo(x - half, y);
+  } else {
+    const tip = shape === 'triangleUp' ? -half : half;
+    ctx.moveTo(x, y + tip);
+    ctx.lineTo(x + half, y - tip);
+    ctx.lineTo(x - half, y - tip);
+  }
+  ctx.closePath();
+}
+
+type MarkerBar = { time: number; high?: number; low?: number };
+
+/**
+ * A shape on each bar with a value, all of one colour in one path: at the
+ * value, or above the bar's high or below its low. Those read the bars the
+ * viewport carries (`viewport.data`), which the chart gives the price pane
+ * only, and only a bar the output has a value at (same time) is read; any
+ * other mark is at its value. Zoomed out, one per pixel column.
+ */
+function drawMarkers(
+  ctx: CanvasRenderingContext2D, output: IndicatorOutput, series: Series, plot: IndicatorPlot, own: IndicatorPlotStyle | undefined,
+  from: number, to: number, viewport: ViewportState, toY: (v: number) => number, color: string, take: Take, pricePane: boolean,
+): void {
+  const half = markerSize(own, viewport) / 2;
+  const shape = own?.shape ?? plot.shape ?? 'dot';
+  const position = markerPosition(plot, pricePane);
+  const bars = viewport.data as readonly MarkerBar[] | undefined;
+  // On an inverted scale a bar's high is drawn below its low: above and below follow the screen.
+  const away = viewport.invertScale ? -1 : 1;
+  const dense = isDenseSlots(viewport);
+  let lastCol = NaN;
+  ctx.beginPath();
+  ctx.fillStyle = color;
+  for (let i = from; i <= to; i++) {
+    const val = series[i];
+    const v = finite(val, plot.key);
+    if (v === undefined || !take(val!)) continue;
+    const x = barIndexToX(i, viewport);
+    if (dense) {
+      const col = Math.floor(x);
+      if (col === lastCol) continue;
+      lastCol = col;
+    }
+    const bar = bars?.[i];
+    const aligned = bar !== undefined && output.values.has(bar.time);
+    let y = toY(v);
+    if (aligned && position === 'aboveBar' && bar.high !== undefined) y = toY(bar.high) - away * (MARKER_GAP + half);
+    else if (aligned && position === 'belowBar' && bar.low !== undefined) y = toY(bar.low) + away * (MARKER_GAP + half);
+    traceMark(ctx, shape, x, y, half);
+  }
+  ctx.fill();
 }
 
 /** Dots; zoomed out, one per pixel column (the first there). */

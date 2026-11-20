@@ -2,9 +2,10 @@ import { LayerType } from '@tradecanvas/commons';
 import type { Size, ViewportState, Theme, DataSeries, Rect, PaneStyle } from '@tradecanvas/commons';
 import { priceToY, yToPrice, xToBarIndex, barIndexToX } from '../viewport/ScaleMapping.js';
 import { DARK_PRICE_LIMITS, LIGHT_PRICE_LIMITS, PRICE_AXIS_WIDTH, autoPricePrecision, formatPrice, inkOn, lineDash, priceTagText, readableOn } from '@tradecanvas/commons';
-import { panelPrecision, priceScaleText, roundStep, stepTicks } from '../axis/PriceAxis.js';
+import { priceScaleText, stepTicks } from '../axis/PriceAxis.js';
+import { MIN_PANE_PLOT_HEIGHT, panelScale, panelTagText } from '../axis/panelAxisTexts.js';
 import { LayerManager } from './LayerManager.js';
-import { AXIS_LABEL_HEIGHT, renderAxisValueLabels, layoutAxisValueLabels, drawAxisValueLabels, indicatorValuePrecision, type AxisValueLabel, type FixedAxisTag } from '../ui/axisValueLabels.js';
+import { AXIS_LABEL_HEIGHT, renderAxisValueLabels, layoutAxisValueLabels, drawAxisValueLabels, type AxisValueLabel, type FixedAxisTag } from '../ui/axisValueLabels.js';
 import { RenderLoop } from './RenderLoop.js';
 import { DPRManager } from './DPRManager.js';
 import type { CanvasLayer } from './CanvasLayer.js';
@@ -20,6 +21,7 @@ import type { PriceAxis } from '../axis/PriceAxis.js';
 import type { TimeAxis } from '../axis/TimeAxis.js';
 import type { CrosshairHandler } from '../interaction/CrosshairHandler.js';
 import type { IndicatorEngine } from '../indicators/IndicatorEngine.js';
+import { valuePlots } from '../indicators/plots.js';
 import type { DrawingRenderer } from '../drawings/DrawingRenderer.js';
 import type { TradingRenderer } from '../trading/TradingRenderer.js';
 import type { CurrentPriceLine } from '../realtime/CurrentPriceLine.js';
@@ -41,8 +43,6 @@ import type { PriceLineKind } from '../ui/PriceLines.js';
 const PANEL_HEADER_HEIGHT = 20;
 /** The bar across a pane's top, CSS px. */
 const PANE_DIVIDER_HEIGHT = 3;
-/** Below this a pane (folded to its header) draws no scale. */
-const MIN_PANE_PLOT_HEIGHT = 8;
 /** Height of a price limit's tag on the axis. */
 const LIMIT_TAG_HEIGHT = 14;
 /** Half the last price's tag (`CurrentPriceLine`) and of a high/low or bid/ask tag (`PriceLines`). */
@@ -794,7 +794,8 @@ export class RenderEngine {
       const pr = panel.rect;
       const { min, max } = pv.priceRange;
       // A pane folded to its header has no room for a scale.
-      if (max - min <= 0 || pr.height <= 0 || pv.chartRect.height < MIN_PANE_PLOT_HEIGHT) continue;
+      const scale = pr.height > 0 ? panelScale(pv) : null;
+      if (!scale) continue;
 
       const axisX = pr.x + pr.width;
       const insetRect = pv.chartRect; // already inset by header
@@ -808,8 +809,7 @@ export class RenderEngine {
       vLine(c, axisX + 0.5, pr.y, pr.y + pr.height);
       c.stroke();
 
-      const step = roundStep(min, max, insetRect.height);
-      const precision = panelPrecision(step);
+      const { step, precision } = scale;
 
       c.font = panelFont;
       c.textBaseline = 'middle';
@@ -835,9 +835,7 @@ export class RenderEngine {
         const labels = latest.map((v) => ({
           y: priceToY(v.value, pv),
           // On a percent pane, in percent like its scale.
-          text: pv.scaleMode === 'percentage' && pv.scaleBaseline
-            ? priceScaleText(v.value, pv, 2, locale)
-            : formatPrice(v.value, indicatorValuePrecision(v.value), locale),
+          text: panelTagText(v.value, pv, locale),
           color: v.color,
         }));
         renderAxisValueLabels(c, labels, axisX, ctx.viewport.priceAxisWidth ?? PRICE_AXIS_WIDTH,
@@ -909,10 +907,10 @@ export class RenderEngine {
     for (const panel of ctx.panels) {
       const pv = panel.viewport;
       const pr = panel.rect;
-      const { min, max } = pv.priceRange;
-      if (max - min <= 0 || pr.height <= 0 || pv.chartRect.height < MIN_PANE_PLOT_HEIGHT) continue;
+      const scale = pr.height > 0 ? panelScale(pv) : null;
+      if (!scale) continue;
       const axisX = pr.x + pr.width;
-      const precision = panelPrecision(roundStep(min, max, pv.chartRect.height));
+      const { precision } = scale;
 
       // The pane's price at the pointer, as the main chart's axis has it: not while the crosshair is hidden.
       const badge = ctx.crosshairHandler?.getMode() !== 'hidden';
@@ -939,7 +937,7 @@ export class RenderEngine {
       const plots = desc?.descriptor.plots;
       const parts: string[] = [];
       if (plots) {
-        for (const plot of plots) {
+        for (const plot of valuePlots(plots)) {
           const v = val[plot.key];
           if (v !== undefined && Number.isFinite(v)) parts.push(`${plot.title} ${priceScaleText(v, pv, precision, locale)}`);
         }

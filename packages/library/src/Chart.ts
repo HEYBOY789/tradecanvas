@@ -49,7 +49,7 @@ import type { ResolvedLayout, ChartStyleKey, ChartStyleOverrides, ChartStyleOver
 import { readChartTypeOptions, tickBarCount, barTimeUnit, readChartStyleOverrides, readIndicatorPlotStyles, readPaneStyle } from '@tradecanvas/commons';
 import { PriceLines, type BidAsk, SymbolSeriesStore, CompareSymbolIndicator, CompareSymbolPaneIndicator, SpreadIndicator, CorrelationCoefficientIndicator, CorrelationLogIndicator, axisTimes, HiLoRenderer, PointAndFigureRenderer, isPriceLevelAlert, loadWebGL, gpuContextsLeft, whenGpuContextFree, idleCssCursor, isCrosshairCursor } from '@tradecanvas/core';
 import type { GpuRenderer, RendererMode } from '@tradecanvas/core';
-import { indicatorWorkerPool, INDICATOR_WORKER_MIN_BARS, type IndicatorWorkerLease } from '@tradecanvas/core';
+import { indicatorWorkerPool, INDICATOR_WORKER_MIN_BARS, THEME_LOOK_KEYS, valuePlots, panelScale, panelScaleTexts, panelTagText, type IndicatorWorkerLease } from '@tradecanvas/core';
 import { regularHoursFilter } from './regularHours.js';
 import { ChartA11y } from './chartA11y.js';
 import { barDateZone, barsAreDaily, zonedDateFormatter } from '@tradecanvas/commons';
@@ -213,6 +213,12 @@ export class Chart {
   private eventBus: EventBus;
   private streamManager: StreamManager | null = null;
   private executionAdapter: ExecutionAdapter | null = null;
+  /** What a confirmed bracket does with the adapter: `null` when `connectExecution` was not told. */
+  private executionBrackets: 'event' | 'place' | null = null;
+  /** The console was told once that a bracket did not reach the adapter. */
+  private bracketsWarned = false;
+  /** Waits for the first bracket confirmed with an adapter connected without `brackets`, to say so. */
+  private bracketWarner: (() => void) | null = null;
   private execTeardown: (() => void) | null = null;
   private autoScrollOnNewBar = true;
   /** The drawn series (Renko bricks…) the indicators were last worked out on; null: the data bars. */
@@ -509,6 +515,8 @@ export class Chart {
     }
     this.layoutManager = new LayoutManager();
     this.indicatorEngine = new IndicatorEngine();
+    // The chart's theme from the start: indicators added before the first frame take its look too.
+    this.indicatorEngine.setTheme(this.themeManager.getTheme());
     this.panes = new PaneLayout(this.layoutManager, this.indicatorEngine, (bounds) => this.crosshairHandler.setReportBounds(bounds));
     this.indicatorPanes = new IndicatorPanes(this.indicatorEngine, this.layoutManager, {
       passStyle: (from, heir) => this.panes.passStyle(from, heir),
@@ -2289,8 +2297,8 @@ export class Chart {
   /** Tag each indicator line's latest value on its value axis (off by default). */
   setIndicatorValueLabelsVisible(visible: boolean): void {
     this.features.indicatorValueLabels = visible;
-    this.syncRenderContext();
-    this.engine.requestRender();
+    // The panes' tags share the price axis: it widens for them, or narrows again.
+    this.updateViewportAndRender();
   }
 
   isIndicatorValueLabelsVisible(): boolean {
@@ -2946,7 +2954,8 @@ export class Chart {
       const series = this.indicatorEngine.getOutput(ind.instanceId)?.series;
       if (!series) continue;
       const name = indicatorChipLabel(ind.id, ind.params, ind.descriptor.defaultConfig, ind.descriptor.shortName);
-      const plots = ind.descriptor.plots ?? Object.keys(series.find((p) => p) ?? {}).map((key) => ({ key, title: key }));
+      // Marks on some bars (`kind: 'markers'`) are no column: they are not values.
+      const plots = ind.descriptor.plots ? valuePlots(ind.descriptor.plots) : Object.keys(series.find((p) => p) ?? {}).map((key) => ({ key, title: key }));
       for (const plot of plots) {
         const title = plots.length > 1 ? ` ${plot.title ?? plot.key}` : '';
         columns.push({ name: `${name}${title}`, values: bars.map((_, i) => series[from + i]?.[plot.key] ?? null) });
@@ -3028,6 +3037,14 @@ export class Chart {
   /** Show or hide an indicator without removing it. */
   setIndicatorVisible(instanceId: string, visible: boolean): void {
     this.indicatorHistory.record(instanceId, () => this.setIndicatorVisibleNow(instanceId, visible));
+  }
+
+  /** Show or hide several indicators at once, as one undo step. */
+  setIndicatorsVisible(instanceIds: readonly string[], visible: boolean): void {
+    if (instanceIds.length === 0) return;
+    this.undoRedoManager.group(() => {
+      for (const id of instanceIds) this.setIndicatorVisible(id, visible);
+    });
   }
 
   private setIndicatorVisibleNow(instanceId: string, visible: boolean): void {
@@ -3606,6 +3623,7 @@ export class Chart {
     }
     this.disconnectExecution();
     this.executionAdapter = adapter;
+    this.executionBrackets = config.brackets ?? null;
     this.execTeardown = wireExecution(adapter, {
       onIntent: (type, handler) => {
         const wrapped = (e: ChartEvent) => handler(e.payload);
@@ -3620,15 +3638,50 @@ export class Chart {
         this.eventBus.emit('executionFill', fill);
       },
       getPositions: () => this.tradingManager.getPositions(),
-    });
+      marketPrice: () => this.series.bars().at(-1)?.close ?? null,
+      onBracketOrder: (order, bracket) => this.eventBus.emit('bracketOrder', { order, bracket }),
+    }, { brackets: config.brackets });
+    if (config.brackets === undefined) this.warnOfUnsentBrackets();
     Promise.resolve(adapter.connect(config)).catch((cause) =>
       this.eventBus.emit('executionError', { message: 'Execution connect failed', cause }),
     );
   }
 
+  /**
+   * Whether a confirmed bracket goes to the connected adapter as an order
+   * (`connectExecution(adapter, { brackets: 'place' })`), not only as the
+   * `bracketPlace` event.
+   */
+  placesBrackets(): boolean {
+    return this.executionAdapter !== null && this.executionBrackets === 'place';
+  }
+
+  /**
+   * An adapter connected without saying what a bracket does: the first one
+   * confirmed is said in the console not to have reached it, once a chart.
+   */
+  private warnOfUnsentBrackets(): void {
+    if (this.bracketsWarned || this.bracketWarner) return;
+    const warnOnce = () => {
+      this.stopBracketWarner();
+      this.bracketsWarned = true;
+      console.warn("[Chart] A bracket was confirmed with an execution adapter connected, and was not sent to it: only the bracketPlace event went out. connectExecution(adapter, { brackets: 'place' }) sends it as an order; { brackets: 'event' } keeps the event and says nothing. 'place' becomes the default in the next major version.");
+    };
+    this.bracketWarner = warnOnce;
+    this.eventBus.on('bracketPlace', warnOnce);
+  }
+
+  private stopBracketWarner(): void {
+    if (!this.bracketWarner) return;
+    this.eventBus.off('bracketPlace', this.bracketWarner);
+    this.bracketWarner = null;
+  }
+
   /** Tear down the active execution adapter (if any) and stop routing intents. */
   disconnectExecution(): void {
     this.returnMarkToLive();
+    this.executionBrackets = null;
+    this.stopBracketWarner();
     if (this.execTeardown) {
       this.execTeardown();
       this.execTeardown = null;
@@ -3637,6 +3690,34 @@ export class Chart {
       this.executionAdapter.disconnect();
       this.executionAdapter = null;
     }
+  }
+
+  /**
+   * Hide or show the positions, the orders and their fill marks. Hidden, none
+   * is drawn and none can be pressed or dragged; they are still kept, and
+   * still follow the execution adapter. A bracket or an order being placed
+   * still shows.
+   */
+  setTradingVisible(visible: boolean): void {
+    this.tradingManager.setHidden(!visible);
+  }
+
+  isTradingVisible(): boolean {
+    return !this.tradingManager.isHidden();
+  }
+
+  /**
+   * Lock or unlock the positions' and orders' lines: locked, no line or tag
+   * of theirs can be dragged (an order's price, a stop, a target), and a
+   * position offers no SL or TP to drag out. Their buttons (close, cancel,
+   * reverse, trail, remove a stop) still act.
+   */
+  setTradingLocked(locked: boolean): void {
+    this.tradingManager.setLocked(locked);
+  }
+
+  isTradingLocked(): boolean {
+    return this.tradingManager.isLocked();
   }
 
   /** The connected execution adapter, or null (e.g. for adapter-specific calls). */
@@ -5868,6 +5949,10 @@ export class Chart {
     const { plots: wantPlots, ...want } = ind.style ?? {};
     if (ind.style && JSON.stringify({ ...have, ...want }) !== JSON.stringify(have)) this.updateIndicatorStyle(instanceId, want);
     // Plot styles are merged by updateIndicatorStyle: here they are put back whole.
+    // A part the setup leaves out is the theme's (its descriptor's look): back to it.
+    if (ind.style && this.indicatorEngine.followThemeLook(instanceId, THEME_LOOK_KEYS.filter((key) => ind.style![key] === undefined))) {
+      this.engine.requestRender();
+    }
     if (JSON.stringify(wantPlots ?? {}) !== JSON.stringify(havePlots ?? {})) {
       this.indicatorEngine.setPlotStyles(instanceId, wantPlots ?? null);
       this.engine.requestRender();
@@ -6497,6 +6582,25 @@ export class Chart {
     this.priceFit.settle(this.viewport.getState(), shown.length);
   }
 
+  /**
+   * What the indicator panes write on the price axis: their scales' labels,
+   * and their latest values' tags where those are shown. The panes share the
+   * price pane's axis strip, so it must be as wide as the widest of them.
+   */
+  private paneAxisTexts(): { paneLabels: string[]; paneTags: string[] } {
+    if (!this.features.indicators) return { paneLabels: [], paneTags: [] };
+    const locale = this.numberLocale;
+    // A pane folded to its header, or flat, writes no scale and no tags: nothing to make room for.
+    const panes = this.buildPanelRenderInfos().filter((p) => p.rect.height > 0 && panelScale(p.viewport) !== null);
+    const paneLabels = panes.flatMap((p) => panelScaleTexts(p.viewport, locale));
+    const paneTags = this.features.indicatorValueLabels
+      ? panes.flatMap((p) => [p.instanceId, ...(p.members ?? [])]
+        .flatMap((id) => this.indicatorEngine.getLatestValues(id))
+        .map((v) => panelTagText(v.value, p.viewport, locale)))
+      : [];
+    return { paneLabels, paneTags };
+  }
+
   /** Size the left scale to its widest label; true when the layout changed. */
   private fitLeftAxisWidth(): boolean {
     const left = this.leftViewport;
@@ -6539,6 +6643,7 @@ export class Chart {
       locale: this.numberLocale,
       format: this.priceFormatter,
       scaleLabel: (price) => this.priceAxis.labelText(price, this.viewport.getState()),
+      ...this.paneAxisTexts(),
       fontFamily: theme.font.family,
       fontSizeSmall: theme.font.sizeSmall,
       measure: (text, font) => this.measureText(text, font),
@@ -6648,6 +6753,8 @@ export class Chart {
       );
     }
 
+    // Indicators draw in the theme drawn, and those on their descriptor's look for it follow it.
+    this.indicatorEngine.setTheme(this.themeManager.getTheme());
     const panels = this.features.indicators ? this.buildPanelRenderInfos() : [];
     const timeAxisY = this.panes.timeAxisTop();
 

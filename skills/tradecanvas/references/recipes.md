@@ -326,7 +326,7 @@ import { Chart, BinanceAdapter, PaperExecutionAdapter } from '@tradecanvas/chart
 const adapter = new BinanceAdapter();
 const chart = new Chart(document.getElementById('chart')!, { theme: 'dark' });
 await chart.connect({ adapter, symbol: 'BTCUSDT', timeframe: '1h' });
-chart.connectExecution(new PaperExecutionAdapter());
+chart.connectExecution(new PaperExecutionAdapter(), { brackets: 'place' }); // a confirmed bracket is an order too
 
 // The chart fetches the minutes of the bars it is about to play (not the newest ones).
 chart.replayStart({ animate: true, step: 'auto', startIndex: 300, paused: true, speed: 2 });
@@ -554,6 +554,15 @@ new EquityCurveChart(el('equity'), {
   locale: 'vi',
 });
 
+// Fixed values on an equity curve: lines with their values at the axis, and tinted bands under the curve.
+// The value scale widens to show them unless `fitLevels: false`; setOptions changes them in place.
+const priced = new EquityCurveChart(el('structure'), {
+  data: [{ time: Date.UTC(2026, 0, 1), value: 36_000 }, { time: Date.UTC(2026, 5, 1), value: 42_300 }],
+  levels: [{ value: 41_250, label: 'BOS', color: '#e0a030', labelAt: 'start' }, { value: 38_900, label: 'Equilibrium', dash: [] }],
+  bands: [{ from: 38_900, to: 44_100, label: 'Premium', color: 'rgba(232, 80, 91, 0.10)' }],
+});
+priced.setOptions({ levels: [{ value: 42_000, label: 'CHoCH' }] });
+
 // Steps to a total. A bar with no `type` is a step up or down; `total` and `subtotal` start from zero.
 new WaterfallChart(el('pnl'), {
   data: [{ label: 'Revenue', value: 120 }, { label: 'Costs', value: -45 }, { label: 'Tax', value: -15 }, { label: 'Net', value: 60, type: 'total' }],
@@ -752,6 +761,19 @@ so declare the lowest value your `calculate` really uses (a period your code
 raises to 2 is `min: 2`). `describeInputs(descriptor)` lists the inputs as the
 dialog reads them.
 
+A choice lists its values in `options`; give each a label in your app's
+language as `{ value, label }` (a plain value shows as it is), and the dialog
+shows the label and hands your `calculate` the value:
+
+```ts
+import type { IndicatorInputSpec } from '@tradecanvas/chart';
+
+const type: IndicatorInputSpec = {
+  kind: 'choice',
+  options: [{ value: 'ema', label: 'Exponential' }, { value: 'sma', label: 'Simple' }],
+};
+```
+
 A band or channel needs no `render` of yours either: declare its shading and
 each line's look, and the chart draws them, the settings dialog shows and
 restores a declared dash, and zoomed far out the fill goes a pixel column at a
@@ -775,6 +797,33 @@ const channelLook: Pick<IndicatorDescriptor, 'plots' | 'fills'> = {
 A plot's `opacity` sets it back (bands around a line), and `breakOn: 'session'`
 breaks its line where that output field changes, as VWAP does each session.
 
+To mark some bars (where a line turns, a signal), give them a field and a
+plot of `kind: 'markers'`; leave the field unset on the bars without a mark.
+It is drawn as a shape, at the value or above or below the bar on the price
+pane, and is not a value: no legend value, no axis tag, no export column.
+Not `'dots'`, which is a line and gets all of those.
+
+```ts
+import type { IndicatorPlot } from '@tradecanvas/chart';
+
+const turnPlots: IndicatorPlot[] = [
+  { key: 'value', title: 'MACD', color: 0 },
+  { key: 'turn', title: 'Turn', color: 1, kind: 'markers', shape: 'triangleUp', position: 'belowBar' },
+];
+```
+
+A mark is as wide as the bars allow (4 to 8 px). Its style gives another
+shape and a size in pixels, for a built-in such as Williams Fractals too:
+
+```ts
+import type { Chart } from '@tradecanvas/chart';
+
+function biggerFractals(chart: Chart): void {
+  const fractals = chart.addIndicator('fractals', { period: 2 });
+  if (fractals) chart.updateIndicatorStyle(fractals, { plots: { up: { shape: 'arrowUp', size: 14 }, down: { size: 14 } } });
+}
+```
+
 An indicator that starts again each day, week or month reads the exchange's
 IANA zone as `config.exchangeTimeZone`: the chart sets it from the symbol's
 `timeZone`, else the market's (`setSymbolInfo`, `setMarket`), and leaves it
@@ -782,6 +831,148 @@ unset for UTC. Count days on that clock, not the zone the chart shows, so the
 values stay the same whatever `setTimeZone` displays. A new zone computes again
 only the indicators that read it and those that read their lines; one of yours
 that reads no zone can say `readsExchangeTimeZone: false` in its descriptor.
+
+### Live ticks: `update` and `revisesBefore`
+
+On each tick only the newest bar changes. Without `update`, the chart runs
+`calculate` over the whole history again; with it, the chart hands back your
+last output (`prev`) and the first bar that changed (`from`), and you
+recompute from there. Return `null` to have `calculate` run instead. The
+values must be the ones `calculate` would give. `canResume` and `writePoint`
+(from `IndicatorBase`) check that `prev` still fits the bars and write a bar
+into both `series` and `values`.
+
+`from` is always the first bar that changed. When a new bar can change a bar
+before it (a swing high is known only once `n` bars after it are in), your
+`update` rewrites back from `from - n` itself, and `revisesBefore` returns that
+`n`, so the indicators that read this one's line are recomputed from there too.
+
+```ts
+import { IndicatorBase, IndicatorValueMap } from '@tradecanvas/chart';
+import type { DataSeries, IndicatorConfig, IndicatorDescriptor, IndicatorOutput, IndicatorValue } from '@tradecanvas/chart';
+
+/** A swing high: the bar `strength` bars back is higher than the `strength` bars either side of it. */
+class SwingHighs extends IndicatorBase {
+  descriptor: IndicatorDescriptor = {
+    id: 'swingHighs',
+    name: 'Swing Highs',
+    placement: 'overlay',
+    defaultConfig: { strength: 2 },
+    inputs: { strength: { kind: 'int', min: 1, max: 20 } },
+    plots: [{ key: 'high', title: 'Swing high', color: 0, kind: 'markers', shape: 'triangleDown', position: 'aboveBar' }],
+  };
+
+  private point(data: DataSeries, i: number, n: number): IndicatorValue | null {
+    if (i < n || i + n >= data.length) return null;
+    for (let k = 1; k <= n; k++) {
+      if (data[i - k].high >= data[i].high || data[i + k].high > data[i].high) return null;
+    }
+    return { high: data[i].high };
+  }
+
+  calculate(data: DataSeries, config: IndicatorConfig): IndicatorOutput {
+    const n = Number(config.params.strength) || 2;
+    const out: IndicatorOutput = { values: new IndicatorValueMap(), series: new Array(data.length).fill(null) };
+    for (let i = 0; i < data.length; i++) this.writePoint(out, data, i, this.point(data, i, n));
+    return out;
+  }
+
+  // A new bar decides the bar `strength` back: update rewrites that far, and says so here.
+  revisesBefore(config: IndicatorConfig): number {
+    return Number(config.params.strength) || 2;
+  }
+
+  update(data: DataSeries, config: IndicatorConfig, prev: IndicatorOutput, from: number): IndicatorOutput | null {
+    if (!this.canResume(data, prev, from)) return null;
+    const n = Number(config.params.strength) || 2;
+    for (let i = Math.max(0, from - n); i < data.length; i++) this.writePoint(prev, data, i, this.point(data, i, n));
+    return prev;
+  }
+}
+
+export const swingHighs = new SwingHighs();
+```
+
+### Drawing more than its plots
+
+`IndicatorBase.render` draws the descriptor's `plots` and `fills`. Override
+it to draw more, and call it first. The fifth argument holds the theme the
+chart draws with, for colours and a font the style doesn't give. A mark on
+some bars needs no `render` of yours: a `markers` plot draws it.
+
+```ts
+import { IndicatorBase, barIndexToX, priceToY } from '@tradecanvas/chart';
+import type { IndicatorOutput, IndicatorRenderContext, ResolvedIndicatorStyle, ViewportState } from '@tradecanvas/chart';
+
+/** Its last value written beside it, in the theme's text colour and font. */
+export abstract class LabelledLast extends IndicatorBase {
+  render(ctx: CanvasRenderingContext2D, output: IndicatorOutput, viewport: ViewportState, style: ResolvedIndicatorStyle, context: IndicatorRenderContext): void {
+    super.render(ctx, output, viewport, style, context);
+    const series = output.series ?? [];
+    const last = series.length - 1;
+    const value = series[last]?.value;
+    if (value === undefined || last > viewport.visibleRange.to) return;
+    ctx.fillStyle = context.theme.text;
+    ctx.font = `${context.theme.font.sizeSmall}px ${context.theme.font.family}`;
+    ctx.fillText(value.toFixed(2), barIndexToX(last, viewport) + 6, priceToY(value, viewport));
+  }
+}
+
+```
+
+### Its colours in each theme
+
+`defaultStyle` is the look an indicator starts with: a style, or a function of
+the theme. An instance on it follows `chart.setTheme()`, a colour someone picks
+stays, and the viewer's own saved default (`chart.setIndicatorDefaults`, the
+widget's *Save as default*) comes first. A saved layout leaves the theme's
+colours out, so it opens in the colours of the theme it is shown in.
+
+```ts
+import type { IndicatorDescriptor, Theme } from '@tradecanvas/chart';
+
+const themedLook: Pick<IndicatorDescriptor, 'defaultStyle'> = {
+  defaultStyle: (theme: Theme) => ({ colors: theme.name === 'light' ? ['#1f4e8c'] : ['#8ab4f8'], lineWidths: [2] }),
+};
+```
+
+### Registered before a saved layout is read
+
+A saved layout names indicators by id: one that isn't registered when the
+layout is read is left out. Give a `ChartWidget` your indicators in `plugins`,
+and they are registered before it restores a layout (`persistLayouts`), a
+template or a shared view. On a `Chart`, pass `plugins` to the constructor, or
+call `chart.registerIndicator()` before `loadState`.
+
+```ts
+import { MockAdapter } from '@tradecanvas/chart';
+import type { IndicatorPlugin } from '@tradecanvas/chart';
+import { ChartWidget } from '@tradecanvas/chart/widget';
+
+declare const myIndicator: IndicatorPlugin;
+
+new ChartWidget(document.getElementById('chart')!, {
+  symbol: 'BTCUSDT',
+  adapter: new MockAdapter({ basePrice: 64_000 }),
+  persistLayouts: true,
+  plugins: [{ kind: 'indicator', plugin: myIndicator }],
+});
+```
+
+### What the chart reads off the descriptor
+
+- **The legend** names it by `shortName` and the inputs that differ from
+  `defaultConfig`, and shows the value of each plot that is not `markers`, in
+  its colour.
+- **The price axis** tags the latest value of those same plots.
+- **The CSV export** (`chart.getExportData`) has a column for each of them,
+  named by the legend's name and, when there is more than one, the plot's
+  `title`.
+- **The settings dialog** edits `inputs` (by `kind`, with `label`, limits and
+  labelled `options`), and lists each plot in the Style tab with its colour and
+  whether it shows, and a dash for a `line` or `step`. It edits `levels` too.
+- **The Indicators dialog** lists it under `category`, by `name`.
+- **Another indicator** can read its lines, the same plots, as a source.
 
 ## An overlay of your own, on the price grid
 
@@ -1020,6 +1211,11 @@ widget.setSymbols(more);
   list says `'Cổ phiếu'`, a broker) add no tab and no exchange to pick.
 - `pricePrecision`, `minTick`, `sessions`, `delayMinutes` given here never reach the chart:
   give those through the adapter's `resolveSymbol` or `chart.setSymbolInfo`.
+- `last` (a number, or text written as it is) and `changePercent` (1.5 is
+  +1.50%) show as two columns at the end of a row, the change in the up or
+  down colour, when any row listed has one. The widget fetches none: fill them
+  from your own quotes, here or in `searchSymbols`' results. A search's
+  figures are not kept for the next opening.
 - `logo` takes `https:`/`http:` addresses, paths on your site, `blob:` and
   `data:image/png|jpeg|gif|webp|avif|svg+xml`; it is loaded as an image only,
   with no referrer (allow its host in your CSP's `img-src`). Anything else, or
@@ -1062,12 +1258,15 @@ widget.setUI({
 console.log(widget.getUI().sizes.control, WIDGET_UI_PRESETS.capsule.components.control);
 ```
 
-The look changes shapes and sizes only; colours stay with `theme`. Print
+The look changes shapes and sizes only; colours stay with `theme`, but for
+Modern's, the default: it brings a code editor's dark and light, on the chart
+too (`MODERN_DARK_THEME`, `MODERN_LIGHT_THEME`) unless `theme` is an object.
+`ui: 'print'` gives back the look and colours the widget had before. Print
 keeps to the golden ratio: sizes in half steps of φ (20, 26, 33, 42, 53),
 Fibonacci spacing and corners, type a third of φ apart (11, 13, 15, 18, 21);
 `PHI`, `FIBONACCI` and `phiStep` from `@tradecanvas/commons` do the same for
 yours. The widget loads no fonts, so load the families a look names (Print
-names system faces only). Without `ui` the
+names system faces only; Modern names Geist, then the system's). Without `ui` the
 look's CSS variables (`--tcw-radius`, `--tcw-control-h`, …) stay the
 stylesheet's and your CSS can set them; with it the widget writes them inline.
 The widget draws its faces without OpenType features; to turn on your face's
@@ -1209,6 +1408,12 @@ const widget = new ChartWidget(document.getElementById('chart')!, {
 widget.addToWatchlist('BNBUSDT', 'alts');
 widget.openPanel('symbolInfo');        // price, market status, the day, hours, news
 widget.openPanel('watchlist');         // the panels share the dock beside the chart, all shut to start with
+
+// A page of your own in the dock: its button after the built-in ones, your element under the dock's header
+const figures = document.createElement('div');
+const figuresPage = widget.addDockPage({ id: 'figures', label: 'Key figures', icon: 'info', element: figures });
+widget.openPanel('figures');
+figuresPage?.remove();
 await widget.setTimeframe('100T');     // a bar per 100 trades, from Binance's trades
 
 // Your own feed's quotes instead
@@ -1225,3 +1430,5 @@ Quotes come from a feed's `subscribeQuotes` (or `watchlist.quotes`, or
 info and (with `depthLadder: true`) the depth ladder are panels of one dock
 beside the chart, all shut to start with, opened from a rail at its edge or
 with `widget.openPanel(...)`; `features: { dock: false }` drops the rail.
+`addDockPage` puts a page of yours there too, and the `onPanelChange` option is
+told which panel is open (or `null`) whenever that changes.

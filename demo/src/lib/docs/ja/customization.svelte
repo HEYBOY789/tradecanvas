@@ -25,7 +25,7 @@
     <tr><td>インジケーターの線、ペインの背景</td><td><code>updateIndicatorStyle(id, {'{ plots }'})</code>、<code>setPaneStyle</code></td></tr>
     <tr><td>ウィジェットのどの部品を表示するか</td><td><code>features</code> / <code>setFeatures</code> — <a href="#switches">下記</a></td></tr>
     <tr><td>チャート上でユーザーができること：描画、取引、ズーム</td><td>チャート自体の features：<code>chartOptions: {'{ features: { drawings: false } }'}</code></td></tr>
-    <tr><td>独自のボタン、メニュー、ステータス項目</td><td><code>addToolbarButton</code>、<code>addToolbarDropdown</code>、<code>addSidebarButton</code>、<code>addStatusBarItem</code>、<code>getSlot</code>、メニューのフック — <a href="#parts">下記</a></td></tr>
+    <tr><td>独自のボタン、メニュー、ステータス項目</td><td><code>addToolbarButton</code>、<code>addToolbarDropdown</code>、<code>addSidebarButton</code>、<code>addStatusBarItem</code>、<code>getSlot</code>、メニューのフック — <a href="#parts">下記</a>。ドックのページは <code>addDockPage</code> — <a href={href('/docs/api#dock')}>API</a></td></tr>
     <tr><td>独自のキーボードショートカット</td><td><code>addHotkey</code> — <a href="#parts">下記</a></td></tr>
     <tr><td>独自の CSS</td><td>安定したフック：<code>--tcw-*</code>、<code>data-tcw-part</code> — <a href="#css">下記</a></td></tr>
     <tr><td>ウィジェットの文言</td><td><code>locale</code>、<code>messages</code> — <a href="#words">下記</a></td></tr>
@@ -91,7 +91,7 @@ grid.setFeatures({ toasts: false })  // ChartWidgetGrid のすべてのチャー
       <code>orderTicket</code> <code>bracketOrders</code> <code>depthLadder</code> <code>layouts</code>
       <code>indicatorTemplates</code> <code>compare</code> <code>indicatorLegend</code> <code>navigation</code>
       <code>customTimeframes</code> <code>marks</code> <code>intervalTyping</code> <code>symbolTyping</code> <code>dragDropImport</code> <code>hotkeys</code>
-      <code>toasts</code>
+      <code>toasts</code> <code>favoritesBar</code>
     </td></tr>
     <tr><td>ツールバー</td><td>
       <code>toolbar.symbol</code> <code>toolbar.symbolInfo</code> <code>toolbar.timeframes</code>
@@ -139,7 +139,9 @@ grid.setFeatures({ toasts: false })  // ChartWidgetGrid のすべてのチャー
   </tbody>
 </table>
 <p>
-  名前以上のことをするスイッチもあります：<code>indicatorLegend</code> をオフにするとペインに自分のタイトルが戻ります。
+  名前以上のことをするスイッチもあります：<code>indicatorLegend</code> をオフにするとペインに自分のタイトルが戻ります。オンのときは、各インジケーターの行は
+  ホバーかキーボードフォーカスでボタンを表示し、タッチ画面ではタップで行を開いたときに表示します（続けて名前をタップすると設定が開きます）。
+  そのためスマートフォンでボタンがローソク足を隠しません。
   <code>menu.chart.*</code> は右クリックメニューと価格軸の横の "+" の両方に効きます。<code>compare</code> はオブジェクト
   ツリーの追加ボタンを取り除き、表示中の比較は一覧に残ります。<code>toasts</code> はウィジェット自身の通知を止めます（エラーは表示されます）。
   <code>widget.toast()</code> による通知も表示されます。

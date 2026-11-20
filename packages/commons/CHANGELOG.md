@@ -1,5 +1,38 @@
 # @tradecanvas/commons
 
+## 2.16.0
+
+### Minor Changes
+
+- d494334: An equity curve's levels too close for both tags at the axis move their tags apart, each as little as it can, where one was drawn over the other; when there is no room for them all, the lowest levels' are left out. A level's `labelAt: 'start'` writes its name at the line's left end, away from the curve's latest point; `'end'`, the right, is the default. Names in the plot keep clear of each other: a level's goes under its line when another name is over it, and a band's moves down its band past a level's.
+- 7b396bc: The widget opens in a new look, Modern: a code editor's window in its Dark Modern and Light Modern colours, the chart on the editor's ground, 16 px icons in 28 px buttons on a 38 px toolbar, corners of 4, 6 and 8 px, the logo's amber for what you act on and pick, and candles in teal (`#089981`) and red (`#f23645`). Without a theme object the widget's chart takes `MODERN_DARK_THEME` and `MODERN_LIGHT_THEME`, new in `@tradecanvas/commons` and `@tradecanvas/chart`. To keep the widget as it was, pass `ui: 'print'`, or `preset: 'print'` in a `ui` object (one without a preset now starts from Modern): the look, the colours and the candles come back, and the other looks keep those colours too. A chart without the widget is unchanged.
+- bfde7a3: The widget's symbol search shows a symbol's last price and day's change when you give them: `SymbolInfo` takes `last` (a number, or text written as it is) and `changePercent`, and when any row listed has one they show in two columns at the end of it, the change in the up or down colour. The widget fetches none of them. On a phone the exchange goes under the ticker, where a long one (SIMULATED, ALL VENUES) was cut short in a column of its own.
+
+## 2.15.0
+
+### Minor Changes
+
+- 1d30fff: A confirmed bracket can go to the execution adapter. `chart.connectExecution(adapter, { brackets: 'place' })` sends it as one order with `placeOrder`:
+
+  - the entry, a limit or a stop against the price;
+  - its quantity;
+  - its stop-loss and take-profit.
+
+  The chart then sends `bracketOrder` (`{ order, bracket }`) once the adapter took it, or `executionError` with the new `command: 'bracketPlace'` field. Some brackets are not sent: one with no quantity, since no one saw a size to place, and one confirmed before the chart has a price to tell a limit entry from a stop. `executionError` gives the new `reason` (`'noQuantity'`, `'noPrice'`). The brackets that the toolbar and `startBracket` start have no quantity yet, so they are not sent. `chart.placesBrackets()` says whether it does. Without `brackets`, a bracket stays the `bracketPlace` event as before, and the chart warns once in the console when one is confirmed with an adapter connected. `'place'` becomes the default in the next major version, so an app that places the event's bracket itself passes `brackets: 'event'`.
+
+  The widget no longer says a bracket was "placed" when it only went out as the event. It says it was confirmed, says "placed" once the adapter took it, and says why one was not placed.
+
+- df27329: `EquityCurveChart` draws levels and bands. `levels` are lines across the plot at fixed values, each with its value in a tag at the axis and an optional `label`, `color` and `dash`. `bands` are tinted stretches of values under the curve, with an optional `label` and `color`. The value scale widens to show them unless `fitLevels: false`, and `setOptions` changes them without making the chart again.
+- c105460: A position with no stop-loss or no take-profit can be given one on the chart. Its entry's tag has an **SL** or a **TP** button: press it and drag the new line where you want it, or just click to set it where it starts. A stop starts 1% of the entry away and a target at twice the stop's distance, both at least 1% beyond the price now. Letting go sends `positionModify`, as dragging a stop does, so a connected execution adapter applies it. Before, a position opened without them, or whose stop was removed with its ×, could get one back only from code. `lineButtons: { addStops: false }` leaves the buttons out.
+
+## 2.14.0
+
+### Minor Changes
+
+- 94a5466: A choice input's `options` take `{ value, label }` as well as plain values: the indicator settings dialog and the legend show the label, and the indicator is given the value. `describeInputs()` gives the labels as `optionLabels`.
+- fe4a897: A custom indicator's colours can follow the theme: its descriptor takes `defaultStyle`, a style or a function of the theme (`(theme) => ({ colors: … })`). An instance on it changes with `chart.setTheme()`, a colour someone picks for it stays, and it sits under the viewer's saved default (`chart.setIndicatorDefaults()`). A saved layout and the widget's _Save as default_ leave out what the theme gives. An indicator's `render` is also given `{ theme }`, the theme the chart draws with, as its fifth argument.
+- 433f450: A plot of `kind: 'markers'` marks the bars where its field has a value: a `shape` (`'dot'`, `'triangleUp'`, `'triangleDown'`) at the value, or above the bar's high or below its low on the price pane (`position: 'aboveBar' | 'belowBar'`). It gets no value in the legend, no tag on the price axis, no column in the CSV export and no place in the data window, and is not offered as a line another indicator can read.
+
 ## 2.13.1
 
 ## 2.13.0

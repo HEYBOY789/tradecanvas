@@ -2,6 +2,87 @@
 
 ## Unreleased
 
+### Chart
+
+- **The legend's up and down colours as style keys** (`@tradecanvas/chart`, `@tradecanvas/commons`, `@tradecanvas/core`): `legend.upColor` and `legend.downColor` colour the legend's close and change, the crosshair and pinned tooltips and the measure tool, and follow the main series' colours unless set. A chart that hides its candles under an overlay by making them transparent lost those readouts with them; it now sets these two and keeps them. The chart settings' Status line tab has a row for each.
+- **Williams Fractals you can see** (`@tradecanvas/chart`, `@tradecanvas/commons`, `@tradecanvas/core`): its marks were 3 px dots on the tips of the wicks and were lost in them. They are now triangles above a fractal high and below a fractal low, clear of the bar, as wide as the bars allow. As marks, they no longer show a value in the legend or a tag on the axis, and are no longer offered as a line another indicator reads (`indicatorSource` still reads them).
+- **A mark's shape and size** (`@tradecanvas/chart`, `@tradecanvas/commons`, `@tradecanvas/core`): a markers plot's style takes a `shape` (now also `arrowUp`, `arrowDown`, `square` and `diamond`) and a `size` in pixels, or `'auto'`, through `updateIndicatorStyle` and saved layouts. The indicator settings' Style tab has a shape and a size for each mark.
+
+### Packages
+
+- **The npm descriptions and keywords** (`@tradecanvas/chart`, `@tradecanvas/react`, `@tradecanvas/vue`, `@tradecanvas/svelte`, `@tradecanvas/mcp`): each names TradeCanvas the open-source chart library for trading apps, and their keywords say what a search for a trading, candlestick, stock or crypto chart library looks for. The READMEs open with the same words and a link to tradecanvas.dev.
+
+## 2.16.0 (2026-11-19)
+
+### Chart
+
+- **The price axis as wide as the indicator panes need** (`@tradecanvas/chart`, `@tradecanvas/core`): the panes share the price pane's axis, which was sized to the prices alone, so a pane of millions (a CVD at -1,766,028.9) had its last value's tag cut and the tick under it hidden. The axis now fits the panes' scale labels and, when they are shown, their tags, and refits when the tags are turned on or off.
+
+### Finance charts
+
+- **An equity curve's level tags and names kept clear** (`@tradecanvas/chart`): the tags of levels too close for both at the axis move apart instead of one covering the other (the lowest levels' are left out when there is no room for them all), a level's `labelAt: 'start'` writes its name at the line's left end, away from the curve's latest point, and names in the plot keep clear of each other.
+
+### Widget
+
+- **The phone's drawing button clear of the indicator panes** (`@tradecanvas/chart`): it sits at the bottom of the price pane, where it sat over the lowest indicator pane's first bars and legend, and moves as panes come, go or are resized.
+
+- **Prices in the symbol search** (`@tradecanvas/chart`, `@tradecanvas/commons`): a symbol's `last` price and day's `changePercent`, given with the symbols or in a search's results, show in two columns at the end of its row when any row listed has one, the change in the up or down colour; the widget fetches none. On a phone the exchange goes under the ticker, where a long one (SIMULATED, ALL VENUES) was cut short in a column of its own.
+
+- **A new default look, Modern** (`@tradecanvas/chart`, `@tradecanvas/commons`): the widget opens as a code editor's window, in its Dark Modern and Light Modern colours: the chart on the editor's ground (`#1f1f1f` / `#ffffff`) with the bars around it a shade off it, 16 px icons in 28 px buttons on a 38 px toolbar, corners of 4, 6 and 8 px, the logo's amber for buttons, links, focus and a chosen tool, and candles in teal (`#089981`) and red (`#f23645`). Without a theme object the chart takes `MODERN_DARK_THEME` / `MODERN_LIGHT_THEME`, which a chart of your own can use too. To keep the widget as it was, pass `ui: 'print'`, or `preset: 'print'` in a `ui` object (one without a preset now starts from Modern): the look, the colours and the candles come back, and the other looks keep those colours as well. A chart without the widget is unchanged.
+
+- **The widget's Vietnamese strings, reworded** (`@tradecanvas/chart`): the `vi` table is translated again from the English as plain technical Vietnamese, keeping the trading and chart terms Vietnamese traders use in English (position, order, bracket, crosshair, pane and the like). Every key and placeholder is the same; a label your page overrides with `messages` is not changed.
+
+## 2.15.0 (2026-11-19)
+
+### Finance charts
+
+- **Levels and bands on an equity curve** (`@tradecanvas/chart`): `EquityCurveChart` takes `levels`, lines across the plot at fixed values with each value in a tag at the axis, and `bands`, tinted stretches of values under the curve, each with an optional label and colour. The value scale widens to show them unless `fitLevels: false`; `setOptions` changes them in place.
+
+### Trading
+
+- **A stop-loss or a take-profit added on the chart** (`@tradecanvas/chart`): a position without one has an **SL** or a **TP** button on its entry's tag. Press it and drag the new line where you want it, or click to set it where it starts: a stop 1% of the entry away and a target at twice the stop's distance, both at least 1% beyond the price now. Letting go sends `positionModify`, as dragging a stop does, so a connected execution adapter applies it. Before, a position opened without them, or whose stop was removed with its ×, could get one back only from code. `lineButtons: { addStops: false }` leaves the buttons out.
+- **A confirmed bracket can go to the execution adapter** (`@tradecanvas/chart`): `connectExecution(adapter, { brackets: 'place' })` sends it with `placeOrder` as one order: the entry (a limit or a stop against the price), its quantity, and its stop-loss and take-profit. The chart then sends `bracketOrder` once the adapter took it, or `executionError` with the new `command: 'bracketPlace'`. A bracket with no quantity (the toolbar's and `startBracket`'s, for now) or with no price yet to tell a limit entry from a stop is not sent; the error's new `reason` says which; `placesBrackets()` says whether it does. Without `brackets` a bracket stays the `bracketPlace` event, and the chart warns once in the console when one is confirmed with an adapter connected. `'place'` becomes the default in the next major version: an app that places the event's bracket itself passes `brackets: 'event'`. The widget says a bracket is placed only once the adapter took it, confirmed when it only went out as the event, and why when it was not placed.
+
+### Widget
+
+- **A favorites toolbar** (`@tradecanvas/chart`): the star button on the drawing sidebar shows the pinned drawing tools as a bar floating over the chart. Drag its grip to put it anywhere on the chart, press a tool to pick it, right-click one to unpin it. Whether it shows and where it was left are kept in this browser; the sidebar's strip of pins steps aside while it shows. `features: { favoritesBar: false }` leaves it out.
+- **Menus on the drawing sidebar's magnet, lock and hide buttons** (`@tradecanvas/chart`): opened from their corner, a right click or an arrow key. Hide: the drawings, the indicators, the positions and orders, or all. Lock: the drawings, the positions and orders, or all. Magnet: weak or strong; its button now turns the magnet on at the strength last chosen and off, where it cycled through off, weak and strong. What a menu picks is what its button does from then on. New on `Chart`: `setTradingVisible` / `isTradingVisible` (positions, orders and fills hidden: not drawn, not pressable, still following the adapter), `setTradingLocked` / `isTradingLocked` (their lines and tags not dragged; their buttons still act) and `setIndicatorsVisible(ids, visible)` (one undo step).
+- **A page of your own in the dock** (`@tradecanvas/chart`): `widget.addDockPage({ id, label, icon, element, onShow, onHide })` puts its button on the rail after the built-in panels and your element under the dock's header (its label and a close button); `openPanel(id)` opens it, `getOpenPanel()` reports it, and `remove()` takes it away. The `onPanelChange` option is told the open panel, or `null`, however it changed. `openPanel` and `getOpenPanel` take and give `DockPanelId` (a built-in panel or a page's id).
+
+### Drawings
+
+- **The Long/Short Position plays its trade out** (`@tradecanvas/chart`): over the bars in its span, the trade is entered on the first bar at or after the entry and closed where the price first reaches the stop or the target (the stop when one bar reaches both, since which came first is not in the bar; a bar's open when it gaps past a level), at the right edge, or still open at the last bar. The part it went through is tinted in the colour of what it made, with a dashed line from the entry to the close and a tag there (`Target hit`, `Stop hit`, `Closed`, `Open`) with the profit or loss. It is on for positions already drawn; `showOutcome: false` turns it off. Played on the series' own prices, and left out for a box drawn back from its entry and on Renko and the like.
+- **A fourth handle on the Long/Short Position** (`@tradecanvas/chart`): its right edge, on the entry line, sets how long the trade runs; before, the width followed the stop's handle. The entry, the stop and the target now sit on the entry's edge, and the stop's handle changes only its price. Saved drawings keep their place.
+- **A Long/Short Position read as a trade** (`@tradecanvas/chart`): `positionLevels(drawing)` gives the side (`'buy'` for a long), entry, stop-loss, take-profit and the quantity the risk buys (unrounded, with the decimals the drawing writes it in), the money at risk and to gain, and the R:R: the numbers its tags show. `null` for any other drawing, a position whose stop is still on its entry, one with no risk set, or prices that are not finite. An app that places an order from the drawing no longer works them out from its anchors and options again.
+
+### Trading
+
+- **An order placed from a Long/Short Position** (`@tradecanvas/chart`): with trading on, selecting the drawing shows **Create order** in its toolbar. It opens the order ticket filled from the drawing: its side, entry as the price, stop-loss, take-profit and the quantity its risk buys, taken down to the decimals the drawing writes. The order type follows the entry against the market (a buy limit below it, a stop above, the market at it), and nothing is sent until Place; the drawing's levels are the ones `positionLevels` gives.
+
+### Fixes
+
+- **The day's move on the watchlist's own row** (`@tradecanvas/chart`): with no quote for the chart's symbol, its row read the move against the first bar loaded, so a daily chart showed the move over its whole history (+37% where the day was +0.09%). It is the day's move now, against the close before the last day in the bars, in the exchange's zone, as the symbol info panel reads it; no move when the bars hold no day before the last. A `refPrice` given with `setWatchlistEntry` still wins.
+- **The year on the time axis in history** (`@tradecanvas/chart`): panned back to an earlier year, the axis read "Mar … Apr", or days and times, with no year until a January came on view. A tag at its left end, in the style of the timezone tag at the right, now writes what the labels on view leave out, as of the first bar on view: the year among months, the month and year among days (`Mar 2023`), the whole date among the times of one day, in the chart's locale. It is left out where a new year is labelled, and when the labels come from your own `timeFormatter`. Over a label at the left end it stands in for it and says what it said: over "Mar" it reads "Mar 2023".
+
+## 2.14.0 (2026-11-17)
+
+### Indicators
+
+- **A custom indicator's colours follow the theme** (`@tradecanvas/chart`): an indicator's descriptor takes `defaultStyle`, a style or a function of the theme that gives one (`(theme) => ({ colors: … })`). An instance on it changes with `chart.setTheme()`, and a colour someone picks for it stays. It sits under the viewer's saved default, so an app no longer has to call `chart.setIndicatorDefaults()` on each change of theme and overwrite what the viewer saved there. A saved layout leaves out what the theme gives, and the widget's *Save as default* does not keep those colours either.
+- **An indicator's `render` is given the theme** (`@tradecanvas/chart`): a fifth argument, `{ theme }`, the theme the chart draws with, as overlays get it. A plugin draws what its style doesn't give (a mark where a line turns, a label) in the chart's colours and font, without the app handing them over on each change.
+- **Labels for a choice's values** (`@tradecanvas/chart`): a choice input's `options` take `{ value, label }` as well as plain values, and the indicator settings dialog shows the label while the indicator is given the value. The legend names a choice off its default by the same label. An indicator of your own can name its choices in your app's language; before, the dialog showed the raw values (`ema`, `sma`). `describeInputs()` gives the labels as `optionLabels`.
+- **Marks on some bars** (`@tradecanvas/chart`): a plot of `kind: 'markers'` marks the bars where its field has a value, with a `shape` (`'dot'`, `'triangleUp'`, `'triangleDown'`) at the value, or above the bar's high or below its low on the price pane (`position`). It is not a value: it gets none in the legend, no tag on the price axis, no column in the CSV export, no place in the data window, and is not offered as a line another indicator can read. Before, the nearest kind was `'dots'`, which is a line and got all of those, a copy of the line's value among them.
+
+### Coding agents
+
+- **How to write an indicator of your own** (`@tradecanvas/mcp`): the MCP server's new `custom_indicator` tool gives the guide to it: the descriptor, `calculate`, the incremental `update` and when `revisesBefore` is needed, drawing beyond the plots with the theme, colours by theme, registering it before a saved layout is read, and what the legend, the axis, the export and the settings take from the descriptor. Its code is the skill's recipe, which CI type-checks against the packages. `get_indicator` points to it for an id that is not built in. The plugins page of the docs walks through a whole indicator the same way, and `IndicatorBase.render` takes the render context, so an override can pass it on.
+
+### Widget
+
+- **Larger targets for a finger** (`@tradecanvas/chart`): on a touch screen, a pane's fold and maximise buttons take about 30 by 32 px (they were 18 by 16), set further apart, their drawing the same size; the range presets, Go to date and "more" under the chart take at least 32 by 32 px (about 24 by 22 before), and the clock that opens the time zones is 32 px tall. The status bar grows by a few pixels to hold them, so a phone shows a preset or two fewer before "more".
+- **A legend row's buttons wider on a desk** (`@tradecanvas/chart`): Hide, Settings, More and Remove are 24 px wide each, from 20, as tall as before.
+- **Plugins given to the widget** (`@tradecanvas/chart`): `ChartWidget` takes `plugins`, typed, and `chartOptions.plugins` is typed too. They are registered with the widget's chart before it restores a saved layout, a template or a shared view, so a layout that names an indicator of your own gets it back. Before, an app had to register them on `widget.getChart()` after construction, too late for `persistLayouts`, and then load the layout itself.
+
 ### Imports
 
 - **The Powered by badge without the chart** (`@tradecanvas/chart`, `@tradecanvas/svelte`): `@tradecanvas/chart/brand` exports the badge, `createPoweredBy`, `poweredByHtml`, `poweredByLayout`, the mark and the wordmark, and reaches none of the chart. The Svelte `<PoweredBy>` imported them from the main entry, and a bundler could not leave the chart behind, so a page that showed the badge in its footer and drew no chart loaded the chart's engine with it: an app that only mounted the badge took 30 kB gzipped at the start and 82 kB in all. `<PoweredBy>` now imports from the new entry, and the same app takes 20 kB, Svelte's included. The main entry still exports the same names.

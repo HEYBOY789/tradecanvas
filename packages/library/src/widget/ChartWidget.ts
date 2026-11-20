@@ -3,8 +3,8 @@ import { barTimeUnit, marketStatus, offsetAt, stepDecimals, timeframeFollowsDays
 import { settingToTimezone, timezoneOptions, timezoneToSetting } from './widgetTimezones.js';
 import { installFormControls } from './formControls.js';
 import { Chart } from '../Chart.js';
-import { DARK_THEME, LIGHT_THEME, indicatorSource, parseIndicatorSource } from '@tradecanvas/commons';
-import type { ActiveIndicatorInfo, ChartWidgetOptions, WidgetState, ChartSettingsState, WidgetPanel } from './types.js';
+import { DARK_THEME, LIGHT_THEME, MODERN_DARK_THEME, MODERN_LIGHT_THEME, indicatorSource, parseIndicatorSource } from '@tradecanvas/commons';
+import type { ActiveIndicatorInfo, ChartWidgetOptions, WidgetState, ChartSettingsState, DockPageHandle, DockPageSpec, DockPanelId } from './types.js';
 import { CHART_TYPES, DRAWING_TOOL_GROUPS, DEFAULT_SYMBOLS, DEFAULT_SETTINGS } from './widgetConfig.js';
 import { SETTINGS_LOOK_KEYS } from './widgetSettingsLook.js';
 import { injectWidgetStyles, removeWidgetStyles } from './WidgetStyles.js';
@@ -58,6 +58,7 @@ import { IME_KEY_CODE, inOverlay, isKeyTarget, isTyping, registerKeyRoot } from 
 import { type WidgetLayoutContent } from './widgetLayout.js';
 import { LayoutSession } from '../state/LayoutSession.js';
 import { DrawingFavoritesStore } from './DrawingFavoritesStore.js';
+import { WidgetFavoritesBar } from './WidgetFavoritesBar.js';
 import { createIcon } from './icons.js';
 import { watchKeyboardInset } from './keyboardInset.js';
 import { watchNarrow } from './narrowMode.js';
@@ -75,7 +76,7 @@ import { type CompareWay } from './widgetCompare.js';
 import { WidgetTooltip } from './WidgetTooltip.js';
 import { WidgetIndicatorLegend } from './WidgetIndicatorLegend.js';
 import { formatIndicatorValue } from './legendValues.js';
-import { RANGE_PRESETS, SYMBOL_INDICATOR_IDS, adapterFromFeed, indicatorCategory, isCrosshairCursor, sourceParam } from '@tradecanvas/core';
+import { RANGE_PRESETS, SYMBOL_INDICATOR_IDS, adapterFromFeed, indicatorCategory, isCrosshairCursor, isMarkerPlot, sourceParam, valuePlots } from '@tradecanvas/core';
 import { WidgetBracketBar } from './WidgetBracketBar.js';
 import { AlertNotifier } from './AlertNotifier.js';
 import { WidgetDepthLadder } from './WidgetDepthLadder.js';
@@ -126,6 +127,9 @@ const SCALED_TOKENS = [
   '--tcw-font-size', '--tcw-font-size-sm', '--tcw-font-size-xs', '--tcw-font-size-lg', '--tcw-font-size-xl', '--tcw-font-size-display',
   '--tcw-line-height', '--tcw-line-xs', '--tcw-label-size',
 ] as const;
+
+/** The phone's drawing button (44 px) and its 10 px in from the price pane's edge, top and bottom. */
+const DRAWING_BUTTON_ROOM = 44 + 10 * 2;
 
 /**
  * A local timeframe switch (resampling static data) that took at least this
@@ -239,12 +243,17 @@ export class ChartWidget {
   private readonly comparing = new WidgetCompares(this.comparingHost());
   private chart!: Chart;
   private state!: WidgetState;
-  /** The theme for each mode: the host's own where it gave one, so the toggle brings it back. */
-  private themeOf: { dark: Theme; light: Theme } = { dark: DARK_THEME, light: LIGHT_THEME };
+  /**
+   * The host's own theme for each mode, where it gave one, so the toggle brings
+   * it back; `null`, the look's own (Modern's colours, or the built-in ones).
+   */
+  private themeOf: { dark: Theme | null; light: Theme | null } = { dark: null, light: null };
   private toolbar: WidgetToolbar | null = null;
   /** What is open, by its toolbar button's role (`'alerts'`, `'account'`, `'indicators'`…): one effect shows it on the toolbar. */
   private readonly openRoles = signal<ReadonlySet<string>>(new Set());
   private sidebar: WidgetDrawingSidebar | null = null;
+  /** The pinned drawing tools, floating over the chart when shown. */
+  private favoritesBar: WidgetFavoritesBar | null = null;
   private settingsPart: Lazy<WidgetSettings> | null = null;
   private get settings(): WidgetSettings | null {
     return this.settingsPart?.get() ?? null;
@@ -348,7 +357,6 @@ export class ChartWidget {
   private customTimeframes = new DrawingFavoritesStore('tcw:tf-custom');
   /** Timeframes on offer, shortest first. */
   private timeframes: TimeFrame[] = [];
-  private sessionRefPrice: number | null = null;
   private symbolInfoPanel: WidgetSymbolInfo | null = null;
   /** Headlines per symbol, kept a few minutes; a late answer for an earlier symbol is dropped. */
   private news = new SymbolNews();
@@ -477,10 +485,11 @@ export class ChartWidget {
     const settingsKey = settingsStoreKey(options.persistSettings);
     if (settingsKey) this.chartSettings.settingsStore = new ChartSettingsStore(settingsKey);
 
-    // Resolve theme
+    // The look first: the chart's colours are its own unless the host gives a theme.
+    this.ui = resolveWidgetUI(options.ui);
     const isDark = this.resolveIsDark(options.theme);
-    const resolvedTheme = this.resolveTheme(options.theme);
-    this.themeOf = { ...this.themeOf, [isDark ? 'dark' : 'light']: resolvedTheme };
+    this.themeOf = { ...this.themeOf, [isDark ? 'dark' : 'light']: this.hostTheme(options.theme) };
+    const resolvedTheme = this.themeFor(isDark);
 
     // The chart's feature flags; controls for switched-off features are left out.
     // Host overrides win per key (see the Chart below).
@@ -602,9 +611,8 @@ export class ChartWidget {
       this.docking.syncRail();
     });
     // The look: tokens and layout switches on the root and the modal portal
-    // alike. Without `ui` the tokens stay the stylesheet's (Print's), so a
+    // alike. Without `ui` the tokens stay the stylesheet's (Modern's), so a
     // host's CSS can still set them.
-    this.ui = resolveWidgetUI(options.ui);
     this.uiVariables = options.ui !== undefined;
     this.uiScale = this.scaleNow();
     this.applyLookTokens();
@@ -695,22 +703,19 @@ export class ChartWidget {
         onCancelDrawing: () => this.handleCancelDrawing(),
         onCrosshairCursor: (kind) => this.setCrosshairCursor(kind),
         onToggleMagnet: features.drawingMagnet !== false ? () => this.handleToggleMagnet() : undefined,
+        onMagnetMenu: features.drawingMagnet !== false ? (anchor) => this.menus.openMagnetMenu(anchor) : undefined,
         onToggleEraser: () => this.chart.setEraserMode(!this.chart.isEraserMode()),
         onToggleZoomArea: () => this.chart.setZoomAreaMode(!this.chart.isZoomAreaMode()),
         onToggleFavorite: (tool) => this.handleToggleFavorite(tool),
         onClear: (anchor) => this.menus.openClearMenu(anchor),
         onToggleStyle: () => this.drawingStyle?.toggle(),
         onToggleStayInDrawing: () => this.handleToggleStayInDrawing(),
-        onLockAll: (locked) => {
-          this.chart.setDrawingsLocked(this.chart.getDrawings().map((d) => d.id), locked);
-          this.refreshDrawingsState();
-          this.docking.refreshObjects();
-        },
-        onHideAll: (hidden) => {
-          this.chart.setDrawingsVisible(this.chart.getDrawings().map((d) => d.id), !hidden);
-          this.refreshDrawingsState();
-          this.docking.refreshObjects();
-        },
+        onToggleFavoritesBar: () => this.toggleFavoritesBar(),
+        // Each acts on what its menu last chose: the drawings until then.
+        onLockAll: () => this.menus.toggleLocked(),
+        onLockMenu: (anchor) => this.menus.openLockMenu(anchor),
+        onHideAll: () => this.menus.toggleHidden(),
+        onHideMenu: (anchor) => this.menus.openHideMenu(anchor),
       },
     this.t,
     );
@@ -724,6 +729,7 @@ export class ChartWidget {
     this.chartContainer.className = 'tcw-chart-container';
     this.chartContainer.dir = 'ltr';
     body.appendChild(this.chartContainer);
+    this.buildFavoritesBar();
 
     // Loading state: covers the empty chart until the first
     // bars land, then veils the previous chart during slow switches.
@@ -739,7 +745,8 @@ export class ChartWidget {
       savedWidth: () => readDockWidth(),
       saveWidth: (width) => writeDockWidth(width),
       railShown: () => this.docking.railShown(),
-      focusAfterClose: (page) => this.docking.panelFocusTarget(page as WidgetPanel),
+      focusAfterClose: (page) => this.docking.panelFocusTarget(page),
+      onChange: (page) => this.options.onPanelChange?.(page),
       room: () => body.clientWidth,
     });
     this.docking.dock.setScale(this.uiScale);
@@ -778,6 +785,8 @@ export class ChartWidget {
         },
       },
       ...options.chartOptions,
+      // The app's plugins go in with the chart, before any layout is read.
+      plugins: [...(options.chartOptions?.plugins ?? []), ...(options.plugins ?? [])],
       // `features` is merged explicitly (host overrides win per-key) rather
       // than inherited wholesale from the `...options.chartOptions` spread
       // above — otherwise passing e.g. `chartOptions: { features: { x } }`
@@ -947,6 +956,7 @@ export class ChartWidget {
     this.symbolSearchPart = this.lazyPart(DIALOGS.symbolSearch, ({ WidgetSymbolSearch }) => new WidgetSymbolSearch({
       onPick: (sym) => { void this.setSymbol(sym); },
       onClose: () => {},
+      numberLocale: () => this.intlLocale(),
     }, this.overlayHost, this.t));
     this.hotkeySheetPart = this.lazyPart(DIALOGS.hotkeySheet, ({ WidgetHotkeySheet }) => new WidgetHotkeySheet({ onClose: () => {} }, this.t, this.overlayHost));
     this.scope.run(() => this.chartSettings.followSettings());
@@ -1054,8 +1064,10 @@ export class ChartWidget {
     // Bar replay: its panel, the start bar picked on the chart, its keys.
     this.replay = new WidgetReplay(this.replayHost());
     this.replay.attach();
-    // The phone's drawing button keeps to the plot as the chart lays out, or a left scale comes.
-    for (const event of ['resize', 'dataUpdate', 'symbolInfoChange'] as const) {
+    // The phone's drawing button keeps to the plot as the chart lays out, a left scale comes, or
+    // indicator panes come, go or are resized under the price pane (an indicator moved to a pane of
+    // its own, or back, is an indicatorChange).
+    for (const event of ['resize', 'dataUpdate', 'symbolInfoChange', 'indicatorAdd', 'indicatorRemove', 'indicatorChange', 'paneResize', 'paneChange'] as const) {
       this.chart.on(event, () => this.placeDrawingButton());
     }
     this.placeDrawingButton();
@@ -1216,6 +1228,10 @@ export class ChartWidget {
         const id = this.chart.getSelectedDrawingIds()[0];
         if (id) this.alerting.addDrawingAlert(id);
       },
+      onOrder: () => {
+        const id = this.chart.getSelectedDrawingIds()[0];
+        if (id) this.trading.openOrderTicketFromDrawing(id);
+      },
       onLock: (locked) => {
         this.chart.setDrawingsLocked(this.chart.getSelectedDrawingIds(), locked);
         this.docking.refreshObjects();
@@ -1234,8 +1250,8 @@ export class ChartWidget {
         this.drawingEdit.updateSelectionToolbar();
       },
     }, this.t);
-    // Lock all and hide all show whether every drawing is.
-    for (const event of ['drawingCreate', 'drawingUpdate', 'drawingRemove'] as const) {
+    // The lock and hide buttons show whether what they act on is: the drawings, the indicators, or all.
+    for (const event of ['drawingCreate', 'drawingUpdate', 'drawingRemove', 'indicatorAdd', 'indicatorRemove', 'indicatorChange', 'historyChange'] as const) {
       this.chart.on(event, () => this.refreshDrawingsState());
     }
     // Undo and redo on the toolbar, each off while there is nothing for it.
@@ -1341,10 +1357,28 @@ export class ChartWidget {
           this.trading.bracketBar?.hide();
         },
       }, this.t);
+      // Placed only once the broker took it; a bracket that goes no further than the event is confirmed.
       this.chart.on('bracketPlace', (e) => {
         const b = e.payload;
         this.trading.bracketBar?.hide();
+        if (this.chart.placesBrackets()) return;
+        this.say(fill(this.t(b.side === 'buy' ? 'bracket.longConfirmed' : 'bracket.shortConfirmed'), { rr: b.riskReward.toFixed(2) }));
+      });
+      this.chart.on('bracketOrder', (e) => {
+        const b = e.payload.bracket;
         this.say(fill(this.t(b.side === 'buy' ? 'bracket.longPlaced' : 'bracket.shortPlaced'), { rr: b.riskReward.toFixed(2) }));
+      });
+      this.chart.on('executionError', (e) => {
+        if (e.payload.command !== 'bracketPlace') return;
+        if (e.payload.reason === 'noQuantity') {
+          this.say(this.t('bracket.noQuantity'), 'error');
+          return;
+        }
+        // No price yet: only code can confirm a bracket then, and the event tells it.
+        if (e.payload.reason === 'noPrice') return;
+        const cause = e.payload.cause;
+        const reason = cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : e.payload.message;
+        this.say(fill(this.t('bracket.refused'), { reason }), 'error');
       });
 
       // Depth-of-market ladder (opt-in; fed via widget.setDepth)
@@ -1789,10 +1823,11 @@ export class ChartWidget {
 
   /**
    * Open a panel of the dock beside the chart (in a sheet on a phone), in
-   * place of the one open. False when the widget hasn't it: no watchlist, no
-   * depth ladder (the `depthLadder` option), or its switch off.
+   * place of the one open: a built-in one, or a page of yours by its id
+   * (`addDockPage`). False when the widget hasn't it: no watchlist, no depth
+   * ladder (the `depthLadder` option), its switch off, or no page by that id.
    */
-  openPanel(panel: WidgetPanel): boolean {
+  openPanel(panel: DockPanelId): boolean {
     return this.docking.openPanel(panel);
   }
 
@@ -1801,9 +1836,30 @@ export class ChartWidget {
     return this.docking.closePanel();
   }
 
-  /** The panel open in the dock, or null. */
-  getOpenPanel(): WidgetPanel | null {
+  /** The panel open in the dock, a page of yours by its id, or null. `onPanelChange` says when it changes. */
+  getOpenPanel(): DockPanelId | null {
     return this.docking.getOpenPanel();
+  }
+
+  /**
+   * A page of your own in the dock, beside the built-in panels: its button
+   * on the rail after theirs, and under the dock's header (its label and a
+   * close button) your element. `openPanel(id)` opens it, `getOpenPanel()`
+   * and `onPanelChange` report it. The rail is off on a phone, as for the
+   * built-in panels: open the page from a control of yours there. `null` for
+   * an id a built-in panel or another page has.
+   *
+   * @example
+   * const figures = document.createElement('div');
+   * const page = widget.addDockPage({
+   *   id: 'figures', label: 'Key figures', icon: 'info', element: figures,
+   *   onShow: () => drawFigures(figures, widget.getSymbol()),
+   * });
+   * widget.openPanel('figures');
+   * page?.remove();
+   */
+  addDockPage(spec: DockPageSpec): DockPageHandle | null {
+    return this.docking.addHostPage(spec);
   }
 
   /** Open or close the symbol info panel (toggle when `open` is left out). */
@@ -1883,7 +1939,6 @@ export class ChartWidget {
       this.chartInfoAtSwitch = this.chart.getSymbolInfo();
     }
     this.state = { ...this.state, symbol };
-    this.sessionRefPrice = null;
     this.options.onSymbolChange?.(symbol);
     this.updateUI();
     this.refreshSymbolTitle();
@@ -1905,9 +1960,9 @@ export class ChartWidget {
    * Call with the symbols you care about; the active symbol is updated
    * automatically from the chart's live data.
    *
-   * A host-supplied `refPrice` takes precedence over the widget's own
-   * session-open guess for that symbol — including the active one, so the
-   * auto-tick loop stops clobbering it (see `tickWatchlist`).
+   * A host-supplied `refPrice` takes precedence over the day's move the
+   * widget reads from the chart's bars for that symbol, the active one
+   * included: the close before the last day in the bars.
    */
   setWatchlistEntry(symbol: string, entry: Partial<WatchlistEntry>): void {
     return this.watching.setWatchlistEntry(symbol, entry);
@@ -1953,8 +2008,8 @@ export class ChartWidget {
 
   setTheme(theme: import('@tradecanvas/commons').ThemeName | Theme): void {
     const isDark = this.resolveIsDark(theme);
-    const resolved = this.resolveTheme(theme);
-    this.themeOf = { ...this.themeOf, [isDark ? 'dark' : 'light']: resolved };
+    this.themeOf = { ...this.themeOf, [isDark ? 'dark' : 'light']: this.hostTheme(theme) };
+    const resolved = this.themeFor(isDark);
     this.state = { ...this.state, isDark };
     this.look.set({ dark: isDark, theme: resolved });
     this.updateUI();
@@ -1965,10 +2020,11 @@ export class ChartWidget {
   }
 
   /**
-   * Change the widget's look: a preset (`'print'`, `'studio'`,
+   * Change the widget's look: a preset (`'modern'`, `'print'`, `'studio'`,
    * `'terminal'`, `'capsule'`, `'desk'`) or your theme over one. Colours stay with
-   * `setTheme`. The look sets the chart's bar layout and face too (its figures
-   * face, which is the system's sans in Print; golden bars, except when compact),
+   * `setTheme`, but for Modern's own dark and light, which the chart takes
+   * unless `setTheme` or the `theme` option gave it a theme object. The look sets the chart's bar layout and face too (its figures
+   * face, which is the system's sans in Modern and Print; golden bars, except when compact),
    * over any set on the chart itself, unless `chartOptions` set the bar
    * layout or a `font.family`; the sizes of `chartOptions.font` stay.
    */
@@ -1977,6 +2033,10 @@ export class ChartWidget {
     this.uiVariables = true;
     this.uiScale = this.scaleNow();
     this.applyLookTokens();
+    // The chart's colours follow the look, where they are the look's own.
+    const { dark, theme: drawn } = this.look.get();
+    const next = this.themeFor(dark);
+    if (next !== drawn) this.look.set({ dark, theme: next });
     this.applyChartShapes();
     this.applyLegendFont();
     this.applyChartLook();
@@ -2166,6 +2226,7 @@ export class ChartWidget {
     this.watching.watchlist?.destroy();
     this.toolbar?.destroy();
     this.sidebar?.destroy();
+    this.favoritesBar?.destroy();
     this.settingsPart?.destroy();
     this.statusBar?.destroy();
     this.goToDatePart?.destroy();
@@ -2272,6 +2333,7 @@ export class ChartWidget {
       // Switched on: the symbol's headlines come; off: they go.
       this.marking.load();
     }
+    if (changed('favoritesBar')) this.syncFavoritesBar();
     if (changed('dragDropImport')) {
       if (this.featureState.dragDropImport) this.dragDrop?.attach();
       else this.dragDrop?.detach();
@@ -2558,13 +2620,15 @@ export class ChartWidget {
     return { time: `${time}:${pad(new Date(now).getUTCSeconds())}`, zone: tzLabel(offsetAt(tz, now)) };
   }
 
-  /** Whether every drawing is locked, and every one hidden: the sidebar's lock all and hide all say so. */
+  /** The lock and hide buttons: whether what they act on now is locked and hidden, and its name. */
   private refreshDrawingsState(): void {
-    const drawings = this.chart.getDrawings() ?? [];
-    const all = drawings.length > 0;
-    this.sidebar?.setDrawingsState({
-      locked: all && drawings.every((d) => d.locked),
-      hidden: all && drawings.every((d) => !d.visible),
+    if (!this.sidebar) return;
+    const { hideScope, lockScope } = this.menus;
+    this.sidebar.setDrawingsState({
+      locked: this.menus.isLocked(lockScope),
+      hidden: this.menus.isHidden(hideScope),
+      lockLabel: lockScope === 'drawings' ? undefined : this.t(`lock.${lockScope}`),
+      hideLabel: hideScope === 'drawings' ? undefined : this.t(`hide.${hideScope}`),
     });
   }
 
@@ -2833,9 +2897,53 @@ export class ChartWidget {
     this.updateUI();
   }
 
+  /**
+   * The pinned tools floating over the chart, with the sidebar: shown as it
+   * was left in this browser, its strip on the sidebar stepping aside then.
+   */
+  private buildFavoritesBar(): void {
+    if (!this.sidebar) return;
+    const groups = localizeToolGroups(DRAWING_TOOL_GROUPS, this.t);
+    const toolName = (tool: string) => groups.flatMap((g) => g.tools).find((t) => t.value === tool)?.label ?? tool;
+    this.favoritesBar = new WidgetFavoritesBar(this.chartContainer, {
+      bar: this.t('favoritesBar.toggle'),
+      grip: this.t('favoritesBar.grip'),
+      tool: toolName,
+      toolHint: (tool) => fill(this.t('sidebar.unpinHint'), { tool: toolName(tool) }),
+    }, {
+      onPick: (tool) => this.handleDrawingTool(tool as DrawingToolType),
+      onUnpin: (tool) => this.handleToggleFavorite(tool as DrawingToolType),
+    });
+    this.favoritesBar.setTools(this.favoritesStore.list());
+    this.syncFavoritesBar();
+  }
+
+  /**
+   * The bar shows only with its switch on: off, the pins stay on the
+   * sidebar's strip, whatever this browser kept. The star says whether the
+   * bar is asked for.
+   */
+  private syncFavoritesBar(): void {
+    const bar = this.favoritesBar;
+    if (!bar) return;
+    bar.setAllowed(this.featureState.favoritesBar);
+    this.sidebar?.setFavoritesBarShown(bar.isShown() && this.featureState.favoritesBar);
+  }
+
+  /** The sidebar's favorites button: the bar over the chart shown or hidden, kept so. */
+  private toggleFavoritesBar(): void {
+    const bar = this.favoritesBar;
+    if (!bar) return;
+    bar.setShown(!bar.isShown());
+    this.syncFavoritesBar();
+    // Shown with nothing pinned: nothing to see yet, so say how to fill it.
+    if (bar.isShown() && this.favoritesStore.list().length === 0) this.say(this.t('favoritesBar.empty'));
+  }
+
   private handleToggleFavorite(tool: DrawingToolType): void {
     const pinned = this.favoritesStore.toggle(tool);
     this.sidebar?.setFavorites(this.favoritesStore.list());
+    this.favoritesBar?.setTools(this.favoritesStore.list());
     this.say(pinned ? this.t('toast.pinned') : this.t('toast.unpinned'));
   }
 
@@ -2898,7 +3006,8 @@ export class ChartWidget {
     if (!ind) return;
     const style = this.chart.getIndicatorStyle(instanceId);
     const pane = ind.descriptor.placement === 'panel' || !!ind.pane;
-    const ownLevels = (this.chart.getIndicatorSetup() ?? []).find((s) => s.instanceId === instanceId)?.levels !== undefined;
+    const setup = (this.chart.getIndicatorSetup() ?? []).find((s) => s.instanceId === instanceId);
+    const ownLevels = setup?.levels !== undefined;
     this.chart.beginIndicatorEdit(instanceId);
     dialog.open({
       instanceId,
@@ -2910,6 +3019,8 @@ export class ChartWidget {
       lineSources: lineSourcesFor(instanceId, active, this.t),
       plots: ind.descriptor.plots,
       colors: style?.colors,
+      // A layout leaves out the colours the theme gives: they are the theme's, not the viewer's.
+      colorsFromTheme: setup !== undefined && setup.style?.colors === undefined,
       lineWidth: style?.lineWidths[0],
       plotStyles: style?.plots,
       intervals: this.chart.getIndicatorIntervals(instanceId) ?? null,
@@ -3075,9 +3186,21 @@ export class ChartWidget {
     this.updateUI();
   }
 
-  /** The magnet button goes off → weak → strong → off. */
+  /** The magnet's strength its menu last chose: the button turns it on at it. */
+  private magnetStrength: 'weak' | 'strong' = 'weak';
+
+  /** The magnet button: on at the strength last chosen, or off. */
   private handleToggleMagnet(): void {
-    const mode = !this.state.magnetEnabled ? 'weak' : this.state.magnetStrong ? 'off' : 'strong';
+    this.applyMagnet(this.state.magnetEnabled ? 'off' : this.magnetStrength);
+  }
+
+  /** The magnet's menu: on at `strength`, the button's from then on. */
+  private setMagnetStrength(strength: 'weak' | 'strong'): void {
+    this.magnetStrength = strength;
+    this.applyMagnet(strength);
+  }
+
+  private applyMagnet(mode: 'off' | 'weak' | 'strong'): void {
     this.state = { ...this.state, magnetEnabled: mode !== 'off', magnetStrong: mode === 'strong' };
     this.chart.setDrawingMagnetMode(mode);
     this.updateUI();
@@ -3087,8 +3210,8 @@ export class ChartWidget {
     if (!this.featureState.themeToggle) return;
     const isDark = !this.state.isDark;
     this.state = { ...this.state, isDark };
-    // The mode's theme: the host's own, or the built-in one. The user's colours stay with each.
-    this.look.set({ dark: isDark, theme: isDark ? this.themeOf.dark : this.themeOf.light });
+    // The mode's theme: the host's own, or the look's. The user's colours stay with each.
+    this.look.set({ dark: isDark, theme: this.themeFor(isDark) });
     this.updateUI();
   }
 
@@ -3380,12 +3503,18 @@ export class ChartWidget {
     };
   }
 
-  /** Where the plot starts in the body, for the phone's drawing button to sit over it. */
+  /** Where the price pane's plot is in the body, for the phone's drawing button to sit on it, over no indicator pane. */
   private placeDrawingButton(): void {
     const body = this.bodyEl();
     if (!this.sidebar || !body) return;
-    const inBody = this.chartContainer.getBoundingClientRect().left - body.getBoundingClientRect().left;
-    this.sidebar.setPlotLeft(inBody + this.chart.getPlotRect().x);
+    const bodyRect = body.getBoundingClientRect();
+    const chartRect = this.chartContainer.getBoundingClientRect();
+    const plot = this.chart.getPlotRect();
+    const plotTop = chartRect.top + plot.y;
+    this.sidebar.setPlotLeft(chartRect.left - bodyRect.left + plot.x);
+    // On a price pane too short for it, as high as keeps its top in the pane: over the panes a little, not the toolbar.
+    const highest = bodyRect.bottom - plotTop - DRAWING_BUTTON_ROOM;
+    this.sidebar.setPlotBottom(Math.min(bodyRect.bottom - (plotTop + plot.height), Math.max(0, highest)));
   }
 
   private bodyEl(): HTMLElement | null {
@@ -3460,6 +3589,7 @@ export class ChartWidget {
     this.legend.scheduleLegend();
     this.toolbar?.update(this.state);
     this.sidebar?.update(this.state);
+    this.favoritesBar?.setActive(this.state.activeTool);
     this.showConnection();
   }
 
@@ -3495,11 +3625,17 @@ export class ChartWidget {
     return true;
   }
 
-  private resolveTheme(theme?: import('@tradecanvas/commons').ThemeName | Theme): Theme {
-    if (theme === undefined || theme === 'dark') return DARK_THEME;
-    if (theme === 'light') return LIGHT_THEME;
-    if (typeof theme === 'object') return theme as Theme;
-    return DARK_THEME;
+  /** The host's own theme, when it gave an object; `null` for a mode by name (the look's own). */
+  private hostTheme(theme?: import('@tradecanvas/commons').ThemeName | Theme): Theme | null {
+    return theme !== null && typeof theme === 'object' ? (theme as Theme) : null;
+  }
+
+  /** The chart's theme in a mode: the host's own, or the look's (Modern's colours, or the built-in ones). */
+  private themeFor(dark: boolean): Theme {
+    const own = dark ? this.themeOf.dark : this.themeOf.light;
+    if (own) return own;
+    if (this.ui.preset === 'modern') return dark ? MODERN_DARK_THEME : MODERN_LIGHT_THEME;
+    return dark ? DARK_THEME : LIGHT_THEME;
   }
 
   private isColorDark(color: string): boolean {
@@ -3552,8 +3688,6 @@ export class ChartWidget {
       get destroyed() { return w.destroyed; },
       get options() { return w.options; },
       refreshSymbolInfo: (...args) => w.refreshSymbolInfo(...args),
-      get sessionRefPrice() { return w.sessionRefPrice; },
-      set sessionRefPrice(value) { w.sessionRefPrice = value; },
       setSymbol: (...args) => w.setSymbol(...args),
       get settingsState() { return w.chartSettings.settingsState; },
       get state() { return w.state; },
@@ -3643,6 +3777,7 @@ export class ChartWidget {
       get options() { return w.options; },
       refreshDrawingsState: (...args) => w.refreshDrawingsState(...args),
       refreshObjects: (...args) => w.docking.refreshObjects(...args),
+      setMagnetStrength: (...args) => w.setMagnetStrength(...args),
       resetView: (...args) => w.resetView(...args),
       get root() { return w.root; },
       say: (...args) => w.say(...args),
@@ -3818,6 +3953,7 @@ export class ChartWidget {
       get drawingSettingsPart() { return w.drawingSettingsPart; },
       drawingToolName: (...args) => w.drawingToolName(...args),
       get featureState() { return w.featureState; },
+      get orderTicketReady() { return w.trading.orderTicket !== null; },
       get root() { return w.root; },
       say: (...args) => w.say(...args),
       get t() { return w.t; },
@@ -3883,11 +4019,17 @@ export function lineSourcesFor(instanceId: string, active: readonly ActiveIndica
       }
     }
   }
+  // Marks are not lines to read, but one the indicator reads already stays: it was a line in a layout saved before.
+  const self = active.find((ind) => ind.instanceId === instanceId);
+  const sourceName = self ? sourceParam(self.descriptor) : null;
+  const reading = self && sourceName ? self.params[sourceName] : undefined;
   const out: { value: string; label: string }[] = [];
   for (const ind of active) {
     if (downstream.has(ind.instanceId)) continue;
     const name = widgetIndicatorLabel(ind, t);
-    for (const plot of ind.descriptor.plots ?? []) {
+    const plots = ind.descriptor.plots ?? [];
+    const readable = [...valuePlots(plots), ...plots.filter((p) => isMarkerPlot(p) && indicatorSource(ind.instanceId, p.key) === reading)];
+    for (const plot of readable) {
       out.push({ value: indicatorSource(ind.instanceId, plot.key), label: `${name}: ${plot.title}` });
     }
   }

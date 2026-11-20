@@ -165,7 +165,7 @@ chart.setTimeFormatter((time, { kind, timeZone }) =>
 
 <h3 id="axis-labels">坐标轴如何选择标签</h3>
 <p>
-  时间轴为开启最大日历步长的 K 线标注：一年（粗体）、一个月、一天、一个整点，彼此至少相隔 80 px。因此在 5Y 时显示 <code>2022 · Jul · 2023</code>，一个月时 <code>Oct · 8 · 15</code>，一天之内 <code>12:00 · 18:00</code>。标签属于 K 线而非屏幕：平移时随 K 线移动，前面加载更多历史时保持原位。最早一根 K 线左侧没有标签。月份名称遵循 <code>setNumberLocale</code>，网格线与标签位置一致。
+  时间轴为开启最大日历步长的 K 线标注：一年（粗体）、一个月、一天、一个整点，彼此至少相隔 80 px。因此在 5Y 时显示 <code>2022 · Jul · 2023</code>，一个月时 <code>Oct · 8 · 15</code>，一天之内 <code>12:00 · 18:00</code>。标签属于 K 线而非屏幕：平移时随 K 线移动，前面加载更多历史时保持原位。最早一根 K 线左侧没有标签。当没有标出新的一年时，左端会有一个标签（样式与右端的时区标签相同），以视图中第一根 K 线为准，写出各标签省略的部分：月份之间写年份，日期之间写 <code>Mar 2023</code>，同一天的各个时间之间写完整日期。若它压在左端的某个标签上，就代替那个标签，并写出原来的内容（压在 <code>Mar</code> 上时写 <code>Mar 2023</code>）。平移回历史中时，年份总会出现在坐标轴上。月份名称遵循 <code>setNumberLocale</code>，网格线与标签位置一致。
 </p>
 <p>
   价格轴按其高度放置尽可能多的标签，彼此至少相隔 30 px，并落在市场的最小变动价位上。对数坐标下步长随价格增大，因此底部与顶部一样有标签；百分比或指数坐标下，标签是从基准起算的整百分比或整指数点。指标窗格也按自身高度确定标签数量。
@@ -513,7 +513,10 @@ widget.destroy()`}</code></pre>
     </td></tr>
     <tr><td>画线工具</td><td>
       每个分组的菜单都标出其中工具的快捷键（Alt+T 为趋势线），每一行都有一个星标，可把该工具固定到顶部。底部依次是：
-      画线样式、磁吸、橡皮擦、区域缩放、保持画线模式、全部锁定、全部隐藏，以及垃圾桶按钮：它的菜单可删除绘图、指标或两者，并显示各自的数量，作为一步撤销。
+      画线样式、磁吸、橡皮擦、区域缩放、保持画线模式、锁定、隐藏，以及垃圾桶按钮：它的菜单可删除绘图、指标或两者，并显示各自的数量，作为一步撤销。
+      磁吸、锁定和隐藏按钮的角上各有一个菜单（也可右键或按方向键打开）：磁吸的菜单选择弱或强，按钮则以所选强度开启或关闭磁吸；
+      锁定的菜单锁定绘图、持仓和订单，或全部；隐藏的菜单隐藏绘图、指标、持仓和订单，或全部，并勾选已隐藏的项。
+      菜单选中什么，按钮此后就做什么。隐藏指标只隐藏当时显示的那些，再次显示时也只恢复它们。
     </td></tr>
     <tr><td>状态栏</td><td>
       区间预设和跳转到日期；市场状态、连接状态、一个按显示时区走的时钟（点击它会打开可选的时区列表），以及价格轴的
@@ -542,9 +545,28 @@ widget.destroy()`}</code></pre>
   品种信息从品种旁的 <strong>ⓘ</strong> 打开，任何面板也都可以由你自己的代码打开。<code>ChartWidgetGrid</code> 中的图表各自没有按钮栏，
   除非它的 <code>widget.features</code> 打开了 <code>dock</code>。
 </p>
-<pre><code>{`widget.openPanel('watchlist')   // 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder'; false if not there
+<p>
+  用 <code>addDockPage</code> 可以把你自己的页面放进同一个停靠区：它的按钮排在按钮栏上内置按钮之后，你的元素位于停靠区的标题
+  （页面名称和关闭按钮）下方，使用组件的 <code>--tcw-*</code> 令牌。<code>openPanel(id)</code> 打开它，<code>getOpenPanel()</code>
+  报告它，每次打开、获得尺寸之后都会调用 <code>onShow</code>。<code>remove()</code> 移除它，如果它正打开着则先关闭。
+  与内置面板一样，手机上没有按钮栏：请从你自己的控件打开它。若 id 已被内置面板或另一个页面占用，则返回 <code>null</code>。
+  无论打开的面板如何变化（按钮栏、关闭按钮、你的代码、组件变窄），<code>onPanelChange</code> 选项都会收到打开的面板的 id，
+  或 <code>null</code>。
+</p>
+<pre><code>{`widget.openPanel('watchlist')   // 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder', or a page's id; false if not there
 widget.getOpenPanel()           // the panel open, or null
 widget.closePanel()
+
+const figures = document.createElement('div')
+const page = widget.addDockPage({
+  id: 'figures', label: 'Key figures', icon: 'info', element: figures,   // icon: a built-in name or an <svg> of yours
+  onShow: () => drawFigures(figures, widget.getSymbol()),
+  onHide: () => {},
+})
+widget.openPanel('figures')
+page.remove()
+
+new ChartWidget(host, { onPanelChange: (panel) => keepOpenPanel(panel) })   // 'figures', 'watchlist'… or null
 
 new ChartWidget(host, { features: { dock: false } })              // no rail: the toolbar opens the panels
 new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button for the data window`}</code></pre>
@@ -555,7 +577,7 @@ new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button 
   也可以直接在图表上输入一个字母打开，并以该字母开始搜索。还没有输入时，它列出你的 <code>symbols</code>；
   输入后，每当停顿下来，它就调用数据源的搜索（<code>searchSymbols</code>，或适配器的搜索）。每一行开头是一个标记
   （品种的 logo，没有时是代码的首字母，用该类别的颜色），然后品种、名称、类别和交易所分列显示，图表当前的品种会被标出。
-  标签可以只看一种类别（股票、加密货币），输入时它们保持不动；结果来自两个或更多交易所时，旁边的列表可以只看其中一个。
+  在手机上，交易所显示在代码下方，因此较长的名称（SIMULATED、ALL VENUES）能完整显示，也能区分两个交易所的行。标签可以只看一种类别（股票、加密货币），输入时它们保持不动；结果来自两个或更多交易所时，旁边的列表可以只看其中一个。
   两者都只筛选手头已有的结果，不会重新搜索：一次搜索返回一页结果（适配器的搜索会请求 50 个），所以输入 <code>V</code>
   后选 HNX，显示的是其中的 HNX 品种，而不是所有带 V 的 HNX 品种。列表最多显示最匹配的 200 行，下方一行会说明还有多少个可以继续输入来缩小。没有搜索时，输入会按代码和名称查找你的品种，带不带越南语声调都可以
   （<code>ngan hang</code> 能找到“Ngân hàng”）。<code>{`features: { symbolTyping: false }`}</code> 让在图表上输入的字母不再打开搜索。
@@ -572,6 +594,16 @@ new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button 
     'FPT',   // 只给代码，和以前一样
   ],
 })`}</code></pre>
+<p>
+  品种上的 <code>last</code> 价格和当日 <code>changePercent</code>，无论随 <code>symbols</code> 提供还是在搜索结果中给出，
+  都显示在该行末尾各自的两列中（在手机上，涨跌幅位于价格下方），涨跌幅使用上涨或下跌的颜色；列出的行都没有这两项时，
+  这两列不显示。数字按品种的 <code>pricePrecision</code> 位小数书写，没有时按数值大小，并使用组件的数字区域设置；文本按原样书写。
+  组件不会获取其中任何一项：由你的应用提供它已有的数据。搜索给出的数值随其结果一起显示，不会保留到下次打开搜索。
+</p>
+<pre><code>{`widget.setSymbols([
+  { symbol: 'BTCUSDT', exchange: 'Binance', last: 61668.46, changePercent: 0.37 },
+  { symbol: 'VCB', exchange: 'HOSE', last: 61.2, pricePrecision: 2, changePercent: -0.65 },
+])`}</code></pre>
 <p>
   <code>logo</code> 可以是 <code>https:</code> 或 <code>http:</code> 地址、你网站上的路径、<code>blob:</code> URL，
   或写在 <code>data:</code> 里的图片（PNG、JPEG、GIF、WebP、AVIF 或 SVG）；其他一律忽略。它只会作为图片加载，
@@ -871,6 +903,12 @@ widget.toggleSymbolInfo(true)`}</code></pre>
 <pre><code>{`new ChartWidget(host, {
   drawingFavorites: ['trendLine', 'horizontalLine', 'fibRetracement', 'rectangle'],
 })`}</code></pre>
+<p>
+  侧边栏上的星标按钮会把固定的工具显示为一条浮在图表上的<strong>收藏工具栏</strong>：拖动它的把手可放到图表上任意位置，
+  点按工具即可选用，右键单击可取消固定。它是否显示以及停放的位置保存在当前浏览器中，同一页面的所有组件共用这一设置；
+  它显示时，侧边栏顶部的固定工具条会让开；其开关关闭时，固定的工具仍留在工具条上。它首次出现在图表顶部居中。
+  <code>{`features: { favoritesBar: false }`}</code> 会去掉这条工具栏及其按钮。
+</p>
 
 <h3>画线样式与模板</h3>
 <p>
@@ -906,7 +944,7 @@ chart.removeIndicator(instanceId)`}</code></pre>
   和可见性（它在哪些周期上显示），底部有模板菜单、取消和确定。
   右键点击画线可打开它的菜单：
   设置、基于其线条的提醒、顺序、分组、锁定、隐藏、创建副本和删除。侧边栏里还有橡皮擦、
-  缩放工具，以及可关闭、弱、强三档的磁吸。底层 API 参见
+  缩放工具，以及可在菜单中选择弱或强的磁吸。底层 API 参见
   <a href={href('/docs/drawing-tools')}>画线工具</a>。
 </p>
 

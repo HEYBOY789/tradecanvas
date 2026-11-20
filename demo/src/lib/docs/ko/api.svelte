@@ -168,7 +168,7 @@ chart.setTimeFormatter((time, { kind, timeZone }) =>
 
 <h3 id="axis-labels">축이 라벨을 고르는 방식</h3>
 <p>
-  시간축은 가장 큰 달력 단위를 시작하는 봉에 라벨을 붙입니다: 연도(굵게), 월, 일, 정시이며 서로 최소 80 px 떨어집니다. 그래서 5Y에서는 <code>2022 · Jul · 2023</code>, 한 달에서는 <code>Oct · 8 · 15</code>, 하루 안에서는 <code>12:00 · 18:00</code>으로 읽힙니다. 라벨은 화면이 아니라 봉에 속합니다: 이동하면 봉과 함께 움직이고, 앞쪽에 기록을 더 불러와도 제자리에 있습니다. 가장 오래된 봉의 왼쪽에는 없습니다. 월 이름은 <code>setNumberLocale</code>을 따르며, 격자선은 라벨 위치에 그어집니다.
+  시간축은 가장 큰 달력 단위를 시작하는 봉에 라벨을 붙입니다: 연도(굵게), 월, 일, 정시이며 서로 최소 80 px 떨어집니다. 그래서 5Y에서는 <code>2022 · Jul · 2023</code>, 한 달에서는 <code>Oct · 8 · 15</code>, 하루 안에서는 <code>12:00 · 18:00</code>으로 읽힙니다. 라벨은 화면이 아니라 봉에 속합니다: 이동하면 봉과 함께 움직이고, 앞쪽에 기록을 더 불러와도 제자리에 있습니다. 가장 오래된 봉의 왼쪽에는 없습니다. 새 연도가 라벨로 붙지 않은 곳에서는 왼쪽 끝에, 오른쪽의 시간대 태그와 같은 모양의 태그가 보이는 첫 봉을 기준으로 라벨이 빠뜨린 것을 적습니다: 월들 사이에서는 연도, 일들 사이에서는 <code>Mar 2023</code>, 하루의 시각들 사이에서는 날짜 전체입니다. 왼쪽 끝의 라벨 위에 놓이면 그 라벨을 대신하며, 라벨이 쓰던 내용도 함께 씁니다(<code>Mar</code> 위의 <code>Mar 2023</code>). 과거 기록 쪽으로 이동해 있을 때는 연도가 항상 축에 있습니다. 월 이름은 <code>setNumberLocale</code>을 따르며, 격자선은 라벨 위치에 그어집니다.
 </p>
 <p>
   가격축은 높이에 맞는 만큼의 라벨을 최소 30 px 간격으로, 시장의 호가 단위에 놓습니다. 로그 축에서는 간격이 가격과 함께 커지므로 위쪽처럼 아래쪽에도 라벨이 붙고, 퍼센트나 지수 축에서는 기준에서 센 반듯한 퍼센트나 지수 포인트가 됩니다. 지표 창도 자기 높이로 라벨 수를 정합니다.
@@ -529,7 +529,11 @@ widget.destroy()`}</code></pre>
     </td></tr>
     <tr><td>그리기 도구</td><td>
       각 그룹의 메뉴에는 도구의 단축키(Alt+T는 추세선)가 적혀 있고, 행마다 별이 있어 그 도구를 맨 위에 고정할 수 있습니다.
-      맨 아래에는 그리기 스타일, 자석, 지우개, 영역 확대, 그리기 모드 유지, 모두 잠금, 모두 숨기기, 그리고 휴지통 버튼이 있습니다. 휴지통 메뉴는 그리기, 지표 또는 둘 다를 각각의 개수와 함께 한 번의 실행 취소 단계로 제거합니다.
+      맨 아래에는 그리기 스타일, 자석, 지우개, 영역 확대, 그리기 모드 유지, 잠금, 숨기기, 그리고 휴지통 버튼이 있습니다. 휴지통 메뉴는 그리기, 지표 또는 둘 다를 각각의 개수와 함께 한 번의 실행 취소 단계로 제거합니다.
+      자석, 잠금, 숨기기 버튼에는 모서리에 메뉴가 있습니다(오른쪽 클릭이나 화살표 키로도 열립니다). 자석 메뉴는 약함이나 강함을
+      고르고, 버튼은 그 세기로 자석을 켜고 끕니다. 잠금 메뉴는 그리기, 포지션과 주문, 또는 전부를 잠그고, 숨기기 메뉴는 그리기,
+      지표, 포지션과 주문, 또는 전부를 숨기며 숨긴 항목에 체크 표시를 합니다. 메뉴에서 고른 것이 이후 버튼이 하는 일이 됩니다.
+      지표를 숨기면 보이던 것만 숨기고, 다시 보이면 그것만 돌아옵니다.
     </td></tr>
     <tr><td>상태 바</td><td>
       기간 프리셋과 날짜로 이동, 시장 상태, 연결, 표시 시간대의 시계(누르면 고를 수 있는 시간대 목록이 열립니다), 가격 눈금의
@@ -562,9 +566,29 @@ widget.destroy()`}</code></pre>
   코드에서 열 수 있습니다. <code>ChartWidgetGrid</code>의 차트에는 각자의 레일이 없습니다. 단, 그
   <code>widget.features</code>에서 <code>dock</code>을 켜면 생깁니다.
 </p>
-<pre><code>{`widget.openPanel('watchlist')   // 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder'; false if not there
+<p>
+  직접 만든 페이지는 <code>addDockPage</code>로 같은 도크에 넣습니다: 그 버튼은 레일에서 내장 버튼들 뒤에 놓이고,
+  여러분의 요소는 도크의 머리(라벨과 닫기 버튼) 아래에 위젯의 <code>--tcw-*</code> 토큰으로 놓입니다.
+  <code>openPanel(id)</code>로 열고, <code>getOpenPanel()</code>이 그것을 알려 주며, <code>onShow</code>는 열릴 때마다
+  크기가 정해진 뒤에 호출됩니다. <code>remove()</code>는 페이지를 없애며, 열려 있으면 먼저 닫습니다. 휴대폰에는 내장
+  패널과 마찬가지로 레일이 없으므로 직접 만든 컨트롤에서 여세요. 내장 패널이나 다른 페이지가 이미 쓰는 id를 주면
+  <code>null</code>이 돌아옵니다. <code>onPanelChange</code> 옵션은 어떻게 바뀌었든(레일, 닫기 버튼, 여러분의 코드,
+  위젯이 좁아짐) 열린 패널의 id 또는 <code>null</code>을 받습니다.
+</p>
+<pre><code>{`widget.openPanel('watchlist')   // 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder', or a page's id; false if not there
 widget.getOpenPanel()           // the panel open, or null
 widget.closePanel()
+
+const figures = document.createElement('div')
+const page = widget.addDockPage({
+  id: 'figures', label: 'Key figures', icon: 'info', element: figures,   // icon: a built-in name or an <svg> of yours
+  onShow: () => drawFigures(figures, widget.getSymbol()),
+  onHide: () => {},
+})
+widget.openPanel('figures')
+page.remove()
+
+new ChartWidget(host, { onPanelChange: (panel) => keepOpenPanel(panel) })   // 'figures', 'watchlist'… or null
 
 new ChartWidget(host, { features: { dock: false } })              // no rail: the toolbar opens the panels
 new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button for the data window`}</code></pre>
@@ -575,7 +599,8 @@ new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button 
   또는 차트 위에서 입력한 글자로 열리며, 그 글자로 검색을 시작합니다. 아무것도 입력하기 전에는 <code>symbols</code> 목록을
   보여 주고, 입력하면 입력이 멈출 때마다 피드의 검색(<code>searchSymbols</code> 또는 어댑터의 검색)에 묻습니다. 각 행의 앞에는
   배지(종목의 로고, 없으면 티커의 첫 글자를 종류의 색으로)가 있고, 이어서 종목, 이름, 종류, 거래소가 열로 나뉘어 표시되며,
-  차트의 종목에는 표시가 붙습니다. 탭으로 한 종류(주식, 암호화폐)만 볼 수 있고, 입력하는 동안에도 탭은 그대로입니다. 행이 두 곳
+  차트의 종목에는 표시가 붙습니다. 휴대폰에서는 거래소가 티커 아래에 놓이므로, 긴 이름(SIMULATED, ALL VENUES)도
+  잘리지 않고 두 거래소의 행을 구별할 수 있습니다. 탭으로 한 종류(주식, 암호화폐)만 볼 수 있고, 입력하는 동안에도 탭은 그대로입니다. 행이 두 곳
   이상의 거래소에서 오면 옆의 목록으로 한 거래소만 볼 수 있습니다. 둘 다 이미 받은 행만 걸러 내며 다시 검색하지 않습니다. 검색은
   결과 한 페이지를 돌려주므로(어댑터의 검색에는 50개를 요청합니다), <code>V</code>를 입력한 뒤 HNX를 고르면 그중 HNX 종목이
   보이며, V가 들어간 모든 HNX 종목이 아닙니다. 목록은 가장 잘 맞는 200개 행까지 보여 주고, 그 아래 한 줄이 입력해서 좁힐 수 있는
@@ -596,6 +621,17 @@ new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button 
     'FPT',   // 이전처럼 티커만
   ],
 })`}</code></pre>
+<p>
+  종목의 <code>last</code> 가격과 그날의 <code>changePercent</code>는 <code>symbols</code>로 주든 검색 결과에 담든
+  행 끝의 각자 열에 표시되고(휴대폰에서는 등락률이 가격 아래), 등락률은 상승 또는 하락 색입니다. 나열된 행 중 어느
+  것에도 둘 다 없으면 이 열들은 빠집니다. 숫자는 종목의 <code>pricePrecision</code> 자릿수로, 없으면 크기에 따라,
+  위젯의 숫자 로캘로 씁니다. 문자열은 그대로 씁니다. 위젯은 이 값들을 하나도 가져오지 않습니다. 앱이 가진 것을
+  넘겨 줍니다. 검색이 준 수치는 그 결과가 보이는 동안 표시되며, 다음에 검색을 열 때까지 남지 않습니다.
+</p>
+<pre><code>{`widget.setSymbols([
+  { symbol: 'BTCUSDT', exchange: 'Binance', last: 61668.46, changePercent: 0.37 },
+  { symbol: 'VCB', exchange: 'HOSE', last: 61.2, pricePrecision: 2, changePercent: -0.65 },
+])`}</code></pre>
 <p>
   <code>logo</code>는 <code>https:</code> 또는 <code>http:</code> 주소, 사이트의 경로, <code>blob:</code> URL, 또는
   <code>data:</code>로 쓴 이미지(PNG, JPEG, GIF, WebP, AVIF, SVG)입니다. 그 밖의 값은 무시합니다. 이미지로만, 리퍼러 없이
@@ -917,6 +953,12 @@ widget.toggleSymbolInfo(true)`}</code></pre>
 <pre><code>{`new ChartWidget(host, {
   drawingFavorites: ['trendLine', 'horizontalLine', 'fibRetracement', 'rectangle'],
 })`}</code></pre>
+<p>
+  사이드바의 별 버튼은 고정한 도구를 차트 위에 떠 있는 <strong>즐겨찾기 도구 모음</strong>으로 보여 줍니다. 손잡이를 끌어
+  차트의 원하는 곳에 두고, 도구를 눌러 고르고, 오른쪽 클릭으로 고정을 풉니다. 표시 여부와 놓인 위치는 이 브라우저에 저장되며
+  한 페이지의 위젯이 함께 쓰는 설정입니다. 도구 모음이 보이는 동안 사이드바의 고정 도구 줄은 비켜나고, 스위치가 꺼져 있으면
+  고정한 도구는 줄에 남습니다. 처음에는 차트 위쪽 가운데에 나타납니다. <code>{`features: { favoritesBar: false }`}</code>는 도구 모음과 그 버튼을 뺍니다.
+</p>
 
 <h3>그리기 스타일 및 템플릿</h3>
 <p>
@@ -954,7 +996,7 @@ chart.removeIndicator(instanceId)`}</code></pre>
   텍스트, 좌표(차트 시간대 기준의 각 점), 표시(그림이 보이는 시간 단위)이고, 아래쪽에 템플릿 메뉴, 취소,
   확인이 있습니다. 그림을 오른쪽 클릭하면 메뉴가 열리며, 설정, 선에 거는 알림, 순서,
   그룹, 잠금, 숨기기, 복제, 삭제를 고를 수 있습니다. 사이드바에는 지우개, 확대 도구,
-  그리고 꺼짐·약함·강함으로 바꾸는 자석도 있습니다. 바탕이 되는 API는
+  그리고 메뉴에서 약함이나 강함을 고르는 자석도 있습니다. 바탕이 되는 API는
   <a href={href('/docs/drawing-tools')}>그리기 도구</a>를 참고하세요.
 </p>
 

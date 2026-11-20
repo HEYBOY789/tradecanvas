@@ -25,7 +25,7 @@
     <tr><td>指标的线条、窗格的背景</td><td><code>updateIndicatorStyle(id, {'{ plots }'})</code>、<code>setPaneStyle</code></td></tr>
     <tr><td>组件显示哪些部分</td><td><code>features</code> / <code>setFeatures</code> — <a href="#switches">见下文</a></td></tr>
     <tr><td>用户能在图表上做什么：绘图、交易、缩放</td><td>图表自身的 features：<code>chartOptions: {'{ features: { drawings: false } }'}</code></td></tr>
-    <tr><td>你自己的按钮、菜单和状态项</td><td><code>addToolbarButton</code>、<code>addToolbarDropdown</code>、<code>addSidebarButton</code>、<code>addStatusBarItem</code>、<code>getSlot</code>、菜单钩子 — <a href="#parts">见下文</a></td></tr>
+    <tr><td>你自己的按钮、菜单和状态项</td><td><code>addToolbarButton</code>、<code>addToolbarDropdown</code>、<code>addSidebarButton</code>、<code>addStatusBarItem</code>、<code>getSlot</code>、菜单钩子 — <a href="#parts">见下文</a>；停靠区中的页面用 <code>addDockPage</code> — <a href={href('/docs/api#dock')}>API</a></td></tr>
     <tr><td>你自己的快捷键</td><td><code>addHotkey</code> — <a href="#parts">见下文</a></td></tr>
     <tr><td>你自己的 CSS</td><td>稳定的挂钩：<code>--tcw-*</code>、<code>data-tcw-part</code> — <a href="#css">见下文</a></td></tr>
     <tr><td>组件的文字</td><td><code>locale</code>、<code>messages</code> — <a href="#words">见下文</a></td></tr>
@@ -88,7 +88,7 @@ grid.setFeatures({ toasts: false })  // ChartWidgetGrid 中的每个图表`}</co
       <code>orderTicket</code> <code>bracketOrders</code> <code>depthLadder</code> <code>layouts</code>
       <code>indicatorTemplates</code> <code>compare</code> <code>indicatorLegend</code> <code>navigation</code>
       <code>customTimeframes</code> <code>marks</code> <code>intervalTyping</code> <code>symbolTyping</code> <code>dragDropImport</code> <code>hotkeys</code>
-      <code>toasts</code>
+      <code>toasts</code> <code>favoritesBar</code>
     </td></tr>
     <tr><td>工具栏</td><td>
       <code>toolbar.symbol</code> <code>toolbar.symbolInfo</code> <code>toolbar.timeframes</code>
@@ -136,7 +136,8 @@ grid.setFeatures({ toasts: false })  // ChartWidgetGrid 中的每个图表`}</co
   </tbody>
 </table>
 <p>
-  有几个开关的作用比名字多：关闭 <code>indicatorLegend</code> 后，窗格会显示回自己的标题；<code>menu.chart.*</code>
+  有几个开关的作用比名字多：关闭 <code>indicatorLegend</code> 后，窗格会显示回自己的标题；开启时，每个指标的行只在悬停或键盘聚焦时显示按钮，
+  在触摸屏上则在轻点展开该行后显示（再点它的名称会打开设置），因此在手机上按钮不会遮住K线；<code>menu.chart.*</code>
   同时作用于价格轴旁的 "+" 和右键菜单；<code>compare</code> 去掉对象树里的添加按钮，已有的对比仍保留在列表中；
   <code>toasts</code> 关闭组件自身的提示（错误提示仍会显示），你通过 <code>widget.toast()</code> 发出的提示也照常显示。
   关闭 <code>selectionToolbar</code> 会隐藏选中画线上方的工具栏；右键菜单仍然保留。

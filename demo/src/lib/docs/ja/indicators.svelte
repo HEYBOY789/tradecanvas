@@ -188,6 +188,13 @@ import { detectCandlePatterns, CANDLE_PATTERNS } from '@tradecanvas/chart'
 const found = detectCandlePatterns(bars, { patterns: ['bullishEngulfing', 'hammer'] })
 // [{ index, time, pattern: { id, name, short, direction, kind, bars } }]
 CANDLE_PATTERNS.length                                 // 64`}</code></pre>
+<p>
+  パターンを探すだけでチャートを描かないページ（スキャナー、スクリーナー）は、この 2 つを
+  <code>@tradecanvas/core/patterns</code> から import します。検出器だけで gzip 約 4 kB、独立したチャンクになるので、
+  アプリの他のページがチャートを使っていても、このページはチャートのエンジンを読み込みません。
+  import するにはアプリの依存関係に <code>@tradecanvas/core</code> を加えます。
+</p>
+<pre><code>{`import { detectCandlePatterns, CANDLE_PATTERNS } from '@tradecanvas/core/patterns'`}</code></pre>
 
 <h2>独自のインジケーター</h2>
 <p>
@@ -213,7 +220,12 @@ CANDLE_PATTERNS.length                                 // 64`}</code></pre>
   period: { kind: 'int', min: 2, max: 500 },
   mult: { kind: 'number', min: 0.1, step: 0.1 },
   source: { source: true },
+  type: { kind: 'choice', options: [{ value: 'ema', label: 'Exponential' }, { value: 'sma', label: 'Simple' }] },
 }`}</code></pre>
+<p>
+  選択肢の <code>options</code> は値だけか、設定画面に表示するラベルを付けた値（<code>{'{ value, label }'}</code>）で、
+  ラベルはアプリの言語で書きます。インジケーターに渡されるのは値です。
+</p>
 <p>
   ディスクリプターはプロットの見た目も宣言し、チャートはそのとおりに描きます。<code>fills</code> は両方に値がある
   バーで 2 本のプロットの間を線の下に塗ります。プロットの <code>width</code> はインジケーターの太さにかかわらず
@@ -228,6 +240,17 @@ CANDLE_PATTERNS.length                                 // 64`}</code></pre>
   { key: 'lower', title: 'Lower', color: 0 },
 ],
 fills: [{ between: ['upper', 'lower'], color: 0, opacity: 0.1 }],`}</code></pre>
+<p>
+  <code>kind: 'markers'</code> のプロットは、フィールドに値があるバー（転換点、シグナル）に <code>shape</code>
+  （<code>'dot'</code>、<code>'triangleUp'</code>、<code>'triangleDown'</code>）で印を付けます。位置はその値か、価格ペインでは
+  バーの高値の上または安値の下です（<code>position: 'aboveBar'</code>、<code>'belowBar'</code>）。読み取る値ではないので、
+  凡例に値は出ず、軸にタグは付かず、エクスポートに列もなく、別のインジケーターが読める線としても提示されません。
+  ペインでは、印はその値の位置に置かれます。印のないバーではフィールドを未設定のままにします。
+</p>
+<pre><code>{`plots: [
+  { key: 'value', title: 'MACD', color: 0 },
+  { key: 'turn', title: 'Turn', color: 1, kind: 'markers', shape: 'triangleUp', position: 'belowBar' },
+],`}</code></pre>
 
 <h2>ペイン：サイズ変更、折りたたみ、最大化、並べ替え</h2>
 <p>

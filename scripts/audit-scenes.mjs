@@ -7,7 +7,7 @@
 //
 //   pnpm build
 //   pnpm audit:scenes [scene…]          (all scenes when none is named)
-//   UI=desk pnpm audit:scenes …         (the widgets in that look; Print without it)
+//   UI=desk pnpm audit:scenes …         (the widgets in that look; Modern without it)
 //
 // Writes .tmp/audit/<scene>-<theme>-<size>.png and .tmp/audit/<scene>.png (the
 // sheet), named <scene>-<ui> in place of <scene> with UI; exits 1 when a check
@@ -24,7 +24,10 @@ const { chromium } = await import(process.env.PLAYWRIGHT ? pathToFileURL(process
 
 const UI = process.env.UI ?? '';
 if (UI && !/^[a-z]+$/.test(UI)) throw new Error(`UI must be a look's name, not ${UI}`);
-const SCENES = ['orderAtPrice', 'linkedGrid', 'replay', 'replayDepth', 'compare', 'renko', 'priceLimits', 'indicators', 'ichimoku', 'krx', 'paneDrawings', 'selectedDrawing', 'selectedPaneDrawing', 'manyPanes', 'marks'];
+// The widgets' language, to see its strings fit: `WIDGET_LOCALE=vi` (English without it).
+const WIDGET_LOCALE = process.env.WIDGET_LOCALE ?? '';
+if (WIDGET_LOCALE && !/^[a-zA-Z-]+$/.test(WIDGET_LOCALE)) throw new Error(`WIDGET_LOCALE must be a language tag, not ${WIDGET_LOCALE}`);
+const SCENES = ['orderAtPrice', 'linkedGrid', 'replay', 'replayDepth', 'compare', 'renko', 'priceLimits', 'indicators', 'ichimoku', 'krx', 'paneDrawings', 'selectedDrawing', 'selectedPaneDrawing', 'manyPanes', 'marks', 'historyDaily', 'historyHourly', 'positions', 'watchlistOwnRow', 'dockPage', 'positionAddStops', 'sidebarMenus', 'favoritesBar', 'symbolSearch', 'paneMillions', 'hiddenCandles', 'fractals'];
 const THEMES = ['dark', 'light'];
 const SIZES = {
   phone: { viewport: { width: 390, height: 760 }, isMobile: true, hasTouch: true },
@@ -91,7 +94,7 @@ async function shoot(browser, base, scene, theme, size) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(`error: ${e.message}`));
-  await page.goto(`${base}/scripts/audit/scenes.html?scene=${scene}&theme=${theme}${UI ? `&ui=${UI}` : ''}`);
+  await page.goto(`${base}/scripts/audit/scenes.html?scene=${scene}&theme=${theme}${UI ? `&ui=${UI}` : ''}${WIDGET_LOCALE ? `&locale=${WIDGET_LOCALE}` : ''}`);
   await page.waitForFunction(() => window.stage?.ready, null, { timeout: 30000 });
   await page.waitForTimeout(SETTLE_MS);
   if (scene === 'linkedGrid') {

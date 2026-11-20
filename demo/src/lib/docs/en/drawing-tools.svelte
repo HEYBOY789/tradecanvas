@@ -186,11 +186,67 @@ chart.on('drawingSelect', ({ payload }) => {
 <h2>Long/Short Position</h2>
 <p>
   <code>riskReward</code>: drag from the entry to the stop. The target sits the
-  reward:risk ratio away, and its handle changes the ratio. From the account
-  size and the risk (a percent of the account, or an amount) it works out the
-  quantity, and shows each line's price, distance and profit or loss.
+  reward:risk ratio away. From the account size and the risk (a percent of the
+  account, or an amount) it works out the quantity, and shows each line's
+  price, distance and profit or loss.
 </p>
-<pre><code>{`chart.setDrawingOptions(id, { accountSize: 25_000, riskMode: 'percent', risk: 1, rewardRatio: 3 })`}</code></pre>
+<p>
+  Selected, it has four handles: the entry, the stop and the target on the
+  entry's edge, and its other edge on the entry line. The entry moves in time
+  and price, the stop changes its price, the target the reward:risk ratio, and
+  the other edge how long the trade runs.
+</p>
+<p>
+  Over the bars in that span it plays the trade out. The trade is entered on the
+  first bar at or after the entry. Each bar after it is checked for the stop and
+  the target; one that reaches both is taken as the stop, since which came first
+  is not in the bar, and one that opens past a level closes the trade at its
+  open. The part the trade went through is tinted in the colour of what it made,
+  with a dashed line from the entry to where it closed and a tag there:
+  <code>Target hit</code>, <code>Stop hit</code>, <code>Closed</code> at the
+  right edge, or <code>Open</code> at the last bar, with the profit or loss.
+  It is played on the series' own prices (under Heikin Ashi too), and left out
+  for a box drawn back from its entry and on chart types whose bars are not the
+  series' (Renko, Kagi, line break, point &amp; figure). <code>showOutcome: false</code>
+  turns it off.
+</p>
+<pre><code>{`chart.setDrawingOptions(id, { accountSize: 25_000, riskMode: 'percent', risk: 1, rewardRatio: 3 })
+chart.setDrawingOptions(id, { showOutcome: false })   // the zones and their tags only`}</code></pre>
+<p>
+  <code>positionLevels(drawing)</code> reads one as a trade, for an app that
+  places an order from it: its side (<code>'buy'</code> for a long), entry,
+  stop-loss, take-profit and the quantity its risk buys, unrounded, with the
+  decimals the drawing writes it in. It gives <code>null</code> for any other
+  drawing, for a position whose stop is still on its entry, for one with no
+  risk set (no quantity), and for prices that are not finite numbers.
+</p>
+<p>
+  In the widget, a selected Long/Short Position shows <b>Create order</b>
+  in its toolbar while trading is on: it opens the order ticket filled with these
+  levels (side, entry as the price, stop-loss, take-profit and the quantity its
+  risk buys), which you adjust and place. An order is never one click away.
+</p>
+<p>
+  Round the quantity down to what your broker takes, so the order risks no
+  more than the drawing says. Whether the entry is a limit or a stop order
+  depends on where it is against the price now. <code>placeOrderIntent</code>
+  needs the <code>trading</code> feature on: it emits <code>orderPlace</code>,
+  which a connected execution adapter places (see Trading).
+</p>
+<pre><code>{`import { positionLevels } from '@tradecanvas/chart'
+
+const levels = positionLevels(chart.getDrawings().find((d) => d.id === id))
+if (levels) {
+  const { side, entry, stopLoss, takeProfit, quantity, quantityDecimals } = levels
+  const step = 10 ** quantityDecimals
+  const last = chart.getData().at(-1)?.close ?? entry
+  // A buy below the price now waits as a limit, one above it as a stop; a sell the other way round.
+  const type = (side === 'buy') === (entry <= last) ? 'limit' : 'stop'
+  chart.placeOrderIntent({
+    side, type, price: entry, stopPrice: type === 'stop' ? entry : undefined,
+    quantity: Math.floor(quantity * step) / step, stopLoss, takeProfit,
+  })
+}`}</code></pre>
 
 <h2>Alerts on drawings</h2>
 <p>

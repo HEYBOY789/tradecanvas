@@ -54,7 +54,8 @@ also works on a widget.
    `get_indicator`, `validate_options`…, from `@tradecanvas/mcp`): an
    indicator's params and line keys with `get_indicator`, drawing types with
    `list_drawing_tools`, the charts that are not a trading chart with
-   `list_finance_charts`, and an options object through `validate_options`
+   `list_finance_charts`, how to write an indicator of your own with
+   `custom_indicator`, and an options object through `validate_options`
    before it goes to `new ChartWidget`, `new Chart` or a finance chart. Not connected? It is
    one command: `claude mcp add tradecanvas -- npx -y @tradecanvas/mcp`.
 9. **The time zone is `timeZone`**, as in `Intl.DateTimeFormat`: the option,
@@ -214,7 +215,15 @@ A drawing kept to some intervals (`intervals`, the rules of `IndicatorIntervals`
 with `updateDrawing(id, { intervals })`, null for all) shows only there: `isDrawingShown(id)`.
 Trend lines, rays and extended lines take a middle point and stats (`showPriceRange`,
 `showBarsRange`, `showDateRange`, `showAngle`, `alwaysShowStats`, `statsPosition`).
-`riskReward` is a Long/Short position sized from `accountSize` and `risk`.
+`riskReward` is a Long/Short position sized from `accountSize` and `risk`, which plays the trade out over
+the bars in its span (`showOutcome: false` turns that off); `positionLevels(drawing)`
+(from `@tradecanvas/chart`) reads it as a trade (`side`, `entry`, `stopLoss`, `takeProfit`, an
+unrounded `quantity` above zero with its `quantityDecimals`, `riskAmount`, `rewardAmount`,
+`riskReward`), or `null` (another drawing, no risk set, a stop on the entry): work an order out
+from that, not from its anchors, and round the quantity down to the broker's lot. In the widget the
+selected drawing offers **Create order**, which opens the order ticket filled with those levels
+(side, entry as the price, stop-loss, take-profit and the quantity taken to the drawing's decimals);
+nothing is sent until Place.
 Text tools (`text`, `note`, `callout`, `priceLabel`, `arrowMark`) take a text style:
 `style: { text: 'line one\nline two', fontSize, bold, italic, textColor }`, and a text, a note
 or a callout also `textAlign` ('left' | 'center' | 'right'), `textBackground` (in `fillColor`),
@@ -229,7 +238,9 @@ screen (anchors are shares of the plot, `{ time: 0.5, price: 0.25 }` halfway acr
 In the widget a text tool's words are typed in place (drawn, or double-clicked), and so are a line's or a
 rectangle's (the Text button over the selection, or a double-click on the words); `chart.getDrawingTextRect(id)`
 says where a drawing's words are, and `getDrawingTextSize(id)` their size, for an editor of your own. The widget grows on wide screens (`ui.scale: 'auto'`).
-The widget's magnet starts off; `setDrawingMagnetMode('weak' | 'strong')` turns it on.
+The widget's magnet starts off; `setDrawingMagnetMode('weak' | 'strong')` turns it on. `setTradingVisible(false)` hides the
+positions, orders and fills, `setTradingLocked(true)` stops their lines being dragged, and `setIndicatorsVisible(ids, false)`
+hides several indicators in one undo step.
 Editing is built in, so don't wire it yourself: the magnet also pulls dragged handles and moved
 drawings, Ctrl/⌘ held turns it over, Shift keeps lines at 45° steps, the arrow keys move the
 selection (Shift: ten), and Ctrl/⌘-drag on a drawing drags out a copy.
@@ -392,10 +403,11 @@ everywhere, dotted = one place; a part shows while all of its switches are on, s
 and never add a part: the depth ladder and the watchlist come from their options
 (`depthLadder: true`, `watchlist: true`), and `features: { depthLadder: true }` alone makes no ladder.
 To stop drawing, trading or zoom on the chart, use `chartOptions.features`. The widget's `symbols` (and
-`setSymbols`) take tickers or `SymbolInfo` (`description`, `type`, `exchange`, `logo`): the symbol search then
+`setSymbols`) take tickers or `SymbolInfo` (`description`, `type`, `exchange`, `logo`, `last`, `changePercent`): the symbol search then
 opens named, with kind tabs and an exchange filter (recipe in [references/recipes.md](references/recipes.md)). The dock's panels
 (watchlist, alerts, depth ladder…) start shut: `widget.openPanel('watchlist')`. Your own parts: `addToolbarButton`,
-`addToolbarDropdown`, `addSidebarButton`, `addStatusBarItem`, `getSlot('chart')`, `addHotkey`, and
+`addToolbarDropdown`, `addSidebarButton`, `addStatusBarItem`, `getSlot('chart')`, `addHotkey`, a page in the
+dock with `addDockPage({ id, label, icon, element })` (the `onPanelChange` option says which panel is open), and
 the `chartMenuItems` / `drawingMenuItems` / `indicatorMenuItems` options. Style the widget with your
 own CSS through `--tcw-*` variables and `[data-tcw-part~="name"]` (stable through 1.x).
 

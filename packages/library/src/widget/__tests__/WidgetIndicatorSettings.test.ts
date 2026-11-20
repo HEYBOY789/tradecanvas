@@ -131,6 +131,23 @@ describe('WidgetIndicatorSettings', () => {
     expect(choices()).toEqual(['session', 'week', 'month', 'all'].map((a) => JA_MESSAGES[`indicatorInput.anchor.${a}` as MessageKey]));
     expect(choices()).not.toContain('session');
   });
+
+  it("shows a choice's own labels, and gives back its value", () => {
+    dialog.open({
+      instanceId: 't1', indicatorId: 'tdk-ma', name: 'TDK MA',
+      defaults: { type: 'ema', anchor: 'week' }, params: { type: 'ema', anchor: 'week' },
+      inputs: {
+        type: { options: [{ value: 'ema', label: 'Trung bình mũ' }, { value: 'sma', label: 'Trung bình đơn' }, 'wma'] },
+        // A label of the app's own over the widget's name for a value it knows.
+        anchor: { options: [{ value: 'week', label: 'Tuần' }, 'month'] },
+      },
+    });
+    const selects = [...host.querySelectorAll<HTMLSelectElement>('.tcw-modal-body select')];
+    expect([...selects[0].options].map((o) => [o.value, o.textContent])).toEqual([['ema', 'Trung bình mũ'], ['sma', 'Trung bình đơn'], ['wma', 'wma']]);
+    expect([...selects[1].options].map((o) => o.textContent)).toEqual(['Tuần', 'Month']);
+    change(selects[0], 'sma');
+    expect(onApply).toHaveBeenLastCalledWith('t1', { type: 'sma' });
+  });
 });
 
 describe('WidgetIndicatorSettings style', () => {
@@ -189,6 +206,46 @@ describe('WidgetIndicatorSettings style', () => {
     dialog.open(macdTarget());
     tab('style');
     expect(labels()).not.toContain('Price scale');
+  });
+});
+
+describe('WidgetIndicatorSettings marks', () => {
+  const fractalsTarget = (): IndicatorSettingsTarget => {
+    const d = descriptor('fractals');
+    return {
+      instanceId: 'f1', indicatorId: 'fractals', name: d.name, defaults: d.defaultConfig, params: { ...d.defaultConfig },
+      inputs: d.inputs, plots: d.plots, colors: ['#2ecc71', '#e74c3c'], lineWidth: 1.5,
+    };
+  };
+
+  it('picks each mark’s shape and size, and offers marks no dash or line width', () => {
+    dialog.open(fractalsTarget());
+    tab('style');
+    expect(labels()).toEqual(['Up', 'Down']);
+    const up = host.querySelector<HTMLElement>('[data-plot="up"]')!;
+    const shape = up.querySelector<HTMLSelectElement>('[data-role="mark-shape"]')!;
+    const size = up.querySelector<HTMLSelectElement>('[data-role="mark-size"]')!;
+    expect(shape.value).toBe('triangleUp');
+    expect(size.value).toBe('auto');
+    change(shape, 'diamond');
+    expect(onStyle).toHaveBeenLastCalledWith('f1', { plots: { up: { shape: 'diamond' } } });
+    change(size, '16');
+    expect(onStyle).toHaveBeenLastCalledWith('f1', { plots: { up: { size: 16 } } });
+    change(size, 'auto');
+    expect(onStyle).toHaveBeenLastCalledWith('f1', { plots: { up: { size: 'auto' } } });
+    expect(host.querySelector('[data-role="line-width"]')).toBeNull();
+  });
+
+  it('puts a mark back as its indicator draws it on Cancel', () => {
+    dialog.open(fractalsTarget());
+    tab('style');
+    change(host.querySelector<HTMLSelectElement>('[data-plot="down"] [data-role="mark-shape"]')!, 'square');
+    change(host.querySelector<HTMLSelectElement>('[data-plot="down"] [data-role="mark-size"]')!, '20');
+    onStyle.mockClear();
+    footer('cancel').click();
+    expect(onStyle).toHaveBeenCalledWith('f1', expect.objectContaining({
+      plots: { down: { visible: true, lineStyle: 'solid', shape: 'triangleDown', size: 'auto' } },
+    }));
   });
 });
 
@@ -314,6 +371,18 @@ describe('WidgetIndicatorSettings Cancel, Ok and the defaults', () => {
     expect(saved.style.lineWidths).toEqual([2]);
   });
 
+  it('leaves the colours the theme gave to the theme, but keeps ones picked over them', () => {
+    dialog.open({ ...rsiTarget(), colors: ['#111111'], colorsFromTheme: true, lineWidth: 2 });
+    footer('defaults').click();
+    menuItem('Save as default').click();
+    expect(onSaveDefault.mock.calls[0][1].style).toEqual({ lineWidths: [2] });
+
+    dialog.open({ ...rsiTarget(), colors: ['#222222'], colorsFromTheme: false });
+    footer('defaults').click();
+    menuItem('Save as default').click();
+    expect(onSaveDefault.mock.calls[1][1].style.colors).toEqual(['#222222']);
+  });
+
   it('puts the levels back on the indicator’s own defaults when it had no levels of its own', () => {
     dialog.open(rsiTarget());
     tab('style');
@@ -401,6 +470,13 @@ describe('lineSourcesFor', () => {
       active('obv', 'o1'),
     ], en);
     expect(list.map((l) => l.value)).toEqual(['ind:o1:value']);
+  });
+
+  it('offers no marks, but keeps one the indicator already reads (Fractals were a line before)', () => {
+    const fractals = active('fractals', 'f1');
+    expect(lineSourcesFor('s1', [active('sma', 's1'), fractals], en)).toEqual([]);
+    const reading = lineSourcesFor('s1', [active('sma', 's1', { source: 'ind:f1:up' }), fractals], en);
+    expect(reading).toEqual([{ value: 'ind:f1:up', label: 'Fractals 2: Up' }]);
   });
 
   it('names indicators apart as the legend does: VWAPs of different anchors', () => {

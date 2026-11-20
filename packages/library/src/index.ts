@@ -30,6 +30,7 @@ export type {
   ChartEvent,
   ChartEventMap,
   IndicatorPlugin,
+  IndicatorRenderContext,
   IndicatorDescriptor,
   IndicatorConfig,
   IndicatorOutput,
@@ -159,7 +160,7 @@ export { detectCandlePatterns, CANDLE_PATTERNS } from '@tradecanvas/core';
 
 // Re-export themes and defaults
 export {
-  DARK_THEME, LIGHT_THEME, DARK_TERMINAL, DARK_PRICE_LIMITS, LIGHT_PRICE_LIMITS, TC_PALETTE, TC_SERIES_COLORS, volumeColor, VOLUME_ALPHA, CHART_STYLE_KEYS,
+  DARK_THEME, LIGHT_THEME, MODERN_DARK_THEME, MODERN_LIGHT_THEME, DARK_TERMINAL, DARK_PRICE_LIMITS, LIGHT_PRICE_LIMITS, TC_PALETTE, TC_SERIES_COLORS, volumeColor, VOLUME_ALPHA, CHART_STYLE_KEYS,
   MONO_FONT_FAMILY, FIGURES_FONT_FAMILY, SANS_FONT_FAMILY, CHART_SPACING,
   DEFAULT_DRAWING_STYLE, DEFAULT_TRADING_CONFIG,
   DEFAULT_SIGNAL_STYLE, DEFAULT_TRADE_ZONE_STYLE,
@@ -198,9 +199,12 @@ export type {
   PriceSource,
   IndicatorPlot,
   IndicatorPlotKind,
+  IndicatorMarkerShape,
+  IndicatorMarkerPosition,
   IndicatorFill,
   IndicatorScale,
   IndicatorInputSpec,
+  IndicatorInputOption,
   IndicatorInputKind,
   IndicatorSettingsChangePayload,
 } from '@tradecanvas/commons';
@@ -221,6 +225,9 @@ export type { PriceStepBand, VN30FContract } from '@tradecanvas/commons';
 // Re-export base classes for custom indicators and drawing tools
 export { IndicatorBase, IndicatorValueMap, DrawingBase, indicatorCategory, INDICATOR_CATEGORIES, describeInputs } from '@tradecanvas/core';
 export type { IndicatorInputInfo } from '@tradecanvas/core';
+// The trade a Long/Short Position drawing stands for, for an app that places an order from it.
+export { positionLevels } from '@tradecanvas/core';
+export type { PositionLevels } from '@tradecanvas/core';
 // Screen geometry of a frame, for plugins that draw (indicators, overlays, chart types).
 export { barIndexToX, xToBarIndex, priceToY, priceToYMapper, yToPrice, timeToX, xToTime, timestampToBarIndex } from '@tradecanvas/core';
 
@@ -308,6 +315,8 @@ export type {
   DepthChartOptions,
   EquityPoint,
   EquityCurveOptions,
+  EquityLevel,
+  EquityBand,
   HeatmapCell,
   HeatmapOptions,
   WaterfallBar,

@@ -112,7 +112,8 @@ pnpm eval:probe --models sonnet,opus,haiku --arms memory,search --prompts svelte
 
 A prompt is `generic` (what anyone building a trading chart asks) or
 `feature` (it asks for what TradeCanvas does well: replay, a full widget,
-self-hosting without attribution, Vietnamese price limits); the summary
+self-hosting without attribution, indicators built in with no logo, live
+updates many times a second, Vietnamese price limits); the summary
 reports them apart, since a pick on a feature prompt says little about the
 generic question. `--prompts` matches part of an id (`react` is both
 `react-crypto` and `build-react`).
@@ -127,7 +128,9 @@ was picked instead), `runs.jsonl` with each answer, and the transcripts.
 Run it now and then: the `memory` arm moves only when a model is trained
 again, `search` and `build` move with what the web says. The first run, on
 Sonnet, Opus and Haiku, is [the baseline](baselines/2026-11-08-probe.md):
-TradeCanvas was picked once in 138 runs. To compare other
+TradeCanvas was picked once in 138 runs. [The run of 2026-11-19](baselines/2026-11-19-probe.md),
+on the 5.5 models, is where the site's search pages start from: picked once
+again, named in 9 of the 120 `memory` and `search` runs. To compare other
 assistants by hand, paste a prompt with the line the probe adds: `Recommend
 one library. On the last line of your answer write PICK: <npm package name>.`
 

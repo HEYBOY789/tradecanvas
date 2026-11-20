@@ -199,7 +199,10 @@ const current = agg.getCurrentBar()         // forming bar`}</code></pre>
   Una fuente con <code>subscribeQuotes</code> envía cotizaciones (último precio, variación del día, máximo, mínimo,
   volumen, compra y venta) de muchos símbolos a la vez hasta que la detienes. <code>BinanceAdapter</code> envía
   una instantánea de 24 h y luego su flujo mini-ticker; <code>MockAdapter</code> se inventa las cotizaciones. La
-  lista de seguimiento de un widget llena sus filas con ellas.
+  lista de seguimiento de un widget llena sus filas con ellas. Sin cotización, la fila del propio símbolo del
+  gráfico lee su precio y la variación del día de las barras del gráfico, como hace el panel de información del
+  símbolo: frente al cierre anterior al último día, en la zona horaria de la bolsa, y sin variación cuando las barras
+  no tienen ningún día antes de ese.
 </p>
 <pre><code>{`const stop = new BinanceAdapter().subscribeQuotes(['BTCUSDT', 'ETHUSDT'], (quotes) => {
   for (const q of quotes) console.log(q.symbol, q.last, q.changePercent)
@@ -330,8 +333,9 @@ chart.replayStop()             // back to the live series`}</code></pre>
 
 <h3>La barra de repetición en ChartWidget</h3>
 <p>
-  El botón <strong>Repetición de barras</strong> de la barra de herramientas abre una barra compacta al pie del panel principal,
-  centrada en su gráfico (los paneles de abajo siguen legibles). Primero elige la vela de inicio: haz clic en ella o pulsa
+  El botón <strong>Repetición de barras</strong> de la barra de herramientas abre una barra bajo el gráfico,
+  a todo el ancho del widget y encima de la barra de estado: el gráfico le hace sitio, así que el volumen,
+  los paneles de abajo y el eje de tiempo siguen a la vista. Primero elige la vela de inicio: haz clic en ella o pulsa
   <strong>Barra aleatoria</strong>; <strong>Cancelar</strong> (o <kbd>Esc</kbd>) sale. Después: retroceder,
   <strong>Reproducir</strong>/<strong>Pausa</strong> y avanzar; la fecha y la hora del paso mostrado, en la zona horaria de la
   pantalla (el año solo cuando no es el actual), y una pista con la parte reproducida rellena; <strong>Velocidad</strong> en

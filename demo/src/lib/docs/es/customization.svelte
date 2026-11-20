@@ -25,7 +25,7 @@
     <tr><td>Las líneas de un indicador, el fondo de un panel</td><td><code>updateIndicatorStyle(id, {'{ plots }'})</code>, <code>setPaneStyle</code></td></tr>
     <tr><td>Qué partes del widget se ven</td><td><code>features</code> / <code>setFeatures</code> — <a href="#switches">más abajo</a></td></tr>
     <tr><td>Lo que el usuario puede hacer en el gráfico: dibujar, operar, hacer zoom</td><td>Las features del propio gráfico: <code>chartOptions: {'{ features: { drawings: false } }'}</code></td></tr>
-    <tr><td>Botones, menús y elementos de estado propios</td><td><code>addToolbarButton</code>, <code>addToolbarDropdown</code>, <code>addSidebarButton</code>, <code>addStatusBarItem</code>, <code>getSlot</code>, los ganchos de menú — <a href="#parts">más abajo</a></td></tr>
+    <tr><td>Botones, menús y elementos de estado propios</td><td><code>addToolbarButton</code>, <code>addToolbarDropdown</code>, <code>addSidebarButton</code>, <code>addStatusBarItem</code>, <code>getSlot</code>, los ganchos de menú — <a href="#parts">más abajo</a>; una página en el dock, <code>addDockPage</code> — <a href={href('/docs/api#dock')}>API</a></td></tr>
     <tr><td>Atajos de teclado propios</td><td><code>addHotkey</code> — <a href="#parts">más abajo</a></td></tr>
     <tr><td>Tu propio CSS</td><td>Los ganchos estables: <code>--tcw-*</code>, <code>data-tcw-part</code> — <a href="#css">más abajo</a></td></tr>
     <tr><td>Los textos del widget</td><td><code>locale</code>, <code>messages</code> — <a href="#words">más abajo</a></td></tr>
@@ -91,7 +91,7 @@ grid.setFeatures({ toasts: false })  // cada gráfico de un ChartWidgetGrid`}</c
       <code>orderTicket</code> <code>bracketOrders</code> <code>depthLadder</code> <code>layouts</code>
       <code>indicatorTemplates</code> <code>compare</code> <code>indicatorLegend</code> <code>navigation</code>
       <code>customTimeframes</code> <code>marks</code> <code>intervalTyping</code> <code>symbolTyping</code> <code>dragDropImport</code> <code>hotkeys</code>
-      <code>toasts</code>
+      <code>toasts</code> <code>favoritesBar</code>
     </td></tr>
     <tr><td>Barra de herramientas</td><td>
       <code>toolbar.symbol</code> <code>toolbar.symbolInfo</code> <code>toolbar.timeframes</code>
@@ -139,7 +139,9 @@ grid.setFeatures({ toasts: false })  // cada gráfico de un ChartWidgetGrid`}</c
   </tbody>
 </table>
 <p>
-  Algunos hacen más de lo que dice su nombre: con <code>indicatorLegend</code> apagado, los paneles recuperan su título;
+  Algunos hacen más de lo que dice su nombre: con <code>indicatorLegend</code> apagado, los paneles recuperan su título, y encendido, la fila de cada indicador
+  muestra sus botones al pasar el puntero o con el foco del teclado, y en una pantalla táctil cuando un toque abre la fila
+  (un toque en su nombre abre entonces los ajustes), así que en un teléfono no tapan las velas;
   <code>menu.chart.*</code> vale tanto para el menú del clic derecho como para el "+" junto al eje de precios;
   <code>compare</code> quita el botón de añadir del árbol de objetos, y las comparaciones ya puestas siguen en la lista;
   <code>toasts</code> calla los avisos del propio widget (sus errores se siguen mostrando), y los tuyos con

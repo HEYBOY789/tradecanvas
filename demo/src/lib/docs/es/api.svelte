@@ -173,7 +173,7 @@ chart.setTimeFormatter((time, { kind, timeZone }) =>
 
 <h3 id="axis-labels">Cómo eligen sus etiquetas los ejes</h3>
 <p>
-  El eje de tiempo etiqueta las barras que empiezan los mayores pasos del calendario: un año (en negrita), un mes, un día, una hora redonda, a 80 px como mínimo unas de otras. Así a 5Y se lee <code>2022 · Jul · 2023</code>, en un mes <code>Oct · 8 · 15</code>, dentro de un día <code>12:00 · 18:00</code>. Las etiquetas pertenecen a las barras, no a la pantalla: al desplazarse se mueven con ellas, y el historial cargado delante las deja donde estaban. A la izquierda de la barra más antigua no hay ninguna. Los nombres de mes siguen <code>setNumberLocale</code> y las líneas de la cuadrícula van donde están las etiquetas.
+  El eje de tiempo etiqueta las barras que empiezan los mayores pasos del calendario: un año (en negrita), un mes, un día, una hora redonda, a 80 px como mínimo unas de otras. Así a 5Y se lee <code>2022 · Jul · 2023</code>, en un mes <code>Oct · 8 · 15</code>, dentro de un día <code>12:00 · 18:00</code>. Las etiquetas pertenecen a las barras, no a la pantalla: al desplazarse se mueven con ellas, y el historial cargado delante las deja donde estaban. A la izquierda de la barra más antigua no hay ninguna. Donde no hay ningún año nuevo etiquetado, una etiqueta en el extremo izquierdo, con el estilo de la etiqueta de zona horaria de la derecha, escribe lo que las etiquetas omiten, según la primera barra a la vista: el año entre meses, <code>Mar 2023</code> entre días, la fecha entera entre las horas de un día. Sobre una etiqueta del extremo izquierdo ocupa su lugar y dice lo que ella decía (<code>Mar 2023</code> sobre <code>Mar</code>). Al desplazarse hacia atrás en el historial, el año siempre está en el eje. Los nombres de mes siguen <code>setNumberLocale</code> y las líneas de la cuadrícula van donde están las etiquetas.
 </p>
 <p>
   La escala de precios pone tantas etiquetas como caben en su altura, a 30 px como mínimo, en la fluctuación mínima del mercado. En escala logarítmica su paso crece con el precio, así que abajo hay etiquetas igual que arriba; en una escala de porcentaje o indexada son porcentajes o puntos de índice redondos desde la base. Los paneles de indicadores también cuentan sus etiquetas según su altura.
@@ -570,7 +570,12 @@ widget.destroy()`}</code></pre>
     <tr><td>Herramientas de dibujo</td><td>
       El menú de cada grupo indica los atajos de sus herramientas (Alt+T una línea de tendencia) y tiene una estrella en
       cada fila para fijar la herramienta arriba. Abajo: el estilo de dibujo, el imán, la goma, el zoom de área, mantener
-      el modo de dibujo, bloquear todo, ocultar todo y la papelera: su menú quita los dibujos, los indicadores o ambos, con cuántos hay de cada uno, en un solo paso de deshacer.
+      el modo de dibujo, bloquear, ocultar y la papelera: su menú quita los dibujos, los indicadores o ambos, con cuántos hay de cada uno, en un solo paso de deshacer.
+      Los botones del imán, bloquear y ocultar tienen cada uno un menú en su esquina (o con clic derecho, o una tecla de
+      flecha): el del imán elige débil o fuerte, y el botón enciende el imán con esa fuerza y lo apaga; el de bloquear
+      bloquea los dibujos, las posiciones y órdenes, o todo; el de ocultar oculta los dibujos, los indicadores, las
+      posiciones y órdenes, o todo, marcando lo que está oculto. Lo que elige un menú es lo que su botón hace desde
+      entonces. Ocultar los indicadores oculta los que se veían, y mostrarlos de nuevo devuelve solo esos.
     </td></tr>
     <tr><td>Barra de estado</td><td>
       Los rangos predefinidos e ir a fecha; el estado del mercado, la conexión, un reloj en la zona horaria de la vista
@@ -603,9 +608,30 @@ widget.destroy()`}</code></pre>
   símbolo desde la <strong>ⓘ</strong> junto al símbolo, y cualquier panel desde tu propio código. Los gráficos de un
   <code>ChartWidgetGrid</code> no tienen riel cada uno, salvo que su <code>widget.features</code> active <code>dock</code>.
 </p>
-<pre><code>{`widget.openPanel('watchlist')   // 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder'; false if not there
+<p>
+  Una página propia va en el mismo dock con <code>addDockPage</code>: su botón en el riel, después de los
+  integrados, y tu elemento bajo la cabecera del dock (su etiqueta y un botón de cerrar), con los tokens
+  <code>--tcw-*</code> del widget. <code>openPanel(id)</code> la abre, <code>getOpenPanel()</code> la informa, y
+  <code>onShow</code> se llama cada vez que se abre, una vez que tiene su tamaño. <code>remove()</code> la quita,
+  cerrándola antes si está abierta. En un móvil no hay riel, como para los paneles integrados: ábrela desde un control
+  tuyo. Un id que ya tiene un panel integrado u otra página da <code>null</code>. La opción <code>onPanelChange</code>
+  recibe el id del panel abierto, o <code>null</code>, cambie como cambie: el riel, un botón de cerrar, tu código,
+  un widget que se estrecha.
+</p>
+<pre><code>{`widget.openPanel('watchlist')   // 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder', or a page's id; false if not there
 widget.getOpenPanel()           // the panel open, or null
 widget.closePanel()
+
+const figures = document.createElement('div')
+const page = widget.addDockPage({
+  id: 'figures', label: 'Key figures', icon: 'info', element: figures,   // icon: a built-in name or an <svg> of yours
+  onShow: () => drawFigures(figures, widget.getSymbol()),
+  onHide: () => {},
+})
+widget.openPanel('figures')
+page.remove()
+
+new ChartWidget(host, { onPanelChange: (panel) => keepOpenPanel(panel) })   // 'figures', 'watchlist'… or null
 
 new ChartWidget(host, { features: { dock: false } })              // no rail: the toolbar opens the panels
 new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button for the data window`}</code></pre>
@@ -616,8 +642,9 @@ new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button 
   o al escribir una letra sobre el gráfico, con la que empieza la búsqueda. Lista tus <code>symbols</code> hasta que se
   escribe algo, y luego consulta la búsqueda de tu feed (<code>searchSymbols</code>, o la del adaptador) cuando dejas de
   escribir. Cada fila empieza con una insignia (el logo del símbolo o, si no lo hay, la primera letra de su ticker en el
-  color de su tipo), y siguen el símbolo, su nombre, su tipo y su bolsa en columnas, con el del gráfico marcado. Las
-  pestañas reducen la lista a un tipo (acciones, cripto) y no se mueven mientras escribes; cuando las filas vienen de dos
+  color de su tipo), y siguen el símbolo, su nombre, su tipo y su bolsa en columnas, con el del gráfico marcado. En un móvil
+  la bolsa va bajo el ticker, así que una larga (SIMULATED, ALL VENUES) se lee entera y distingue las filas de dos
+  bolsas. Las pestañas reducen la lista a un tipo (acciones, cripto) y no se mueven mientras escribes; cuando las filas vienen de dos
   bolsas o más, una lista al lado la reduce a una. Ambas filtran las filas que ya hay y no buscan de nuevo: una búsqueda
   devuelve una página de resultados (a la del adaptador se le piden 50), así que HNX elegida tras escribir <code>V</code>
   muestra los de HNX entre ellos, no todos los símbolos de HNX con una V. La lista muestra las 200 mejores filas, y una
@@ -637,6 +664,19 @@ new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button 
     'FPT',   // solo el ticker, como antes
   ],
 })`}</code></pre>
+<p>
+  Un precio <code>last</code> y un <code>changePercent</code> del día en un símbolo, dados con tus
+  <code>symbols</code> o en los resultados de una búsqueda, se muestran en dos columnas propias al final de su fila (en
+  un móvil, la variación bajo el precio), la variación en el color de subida o de bajada; cuando ninguna fila de la lista
+  tiene ninguno de los dos, las columnas se omiten. Un número se escribe con los decimales de <code>pricePrecision</code>
+  del símbolo o, si no, según su tamaño, en la configuración regional de números del widget; un texto se escribe tal cual.
+  El widget no obtiene ninguno: tu app da lo que tiene. Las cifras de una búsqueda se muestran mientras se muestran sus
+  resultados y no se guardan para la próxima vez que se abra la búsqueda.
+</p>
+<pre><code>{`widget.setSymbols([
+  { symbol: 'BTCUSDT', exchange: 'Binance', last: 61668.46, changePercent: 0.37 },
+  { symbol: 'VCB', exchange: 'HOSE', last: 61.2, pricePrecision: 2, changePercent: -0.65 },
+])`}</code></pre>
 <p>
   Un <code>logo</code> es una dirección <code>https:</code> o <code>http:</code>, una ruta de tu sitio, una URL
   <code>blob:</code> o una imagen escrita en <code>data:</code> (PNG, JPEG, GIF, WebP, AVIF o SVG); cualquier otra cosa
@@ -1001,6 +1041,14 @@ widget.toggleSymbolInfo(true)`}</code></pre>
 <pre><code>{`new ChartWidget(host, {
   drawingFavorites: ['trendLine', 'horizontalLine', 'fibRetracement', 'rectangle'],
 })`}</code></pre>
+<p>
+  El botón de la estrella de la barra lateral muestra las herramientas fijadas como una <strong>barra de favoritos</strong>
+  flotando sobre el gráfico: arrastra su asa para ponerla en cualquier lugar del gráfico, pulsa una herramienta para
+  elegirla y haz clic derecho en una para quitarla. Si se muestra y dónde se dejó se guardan en este navegador, como un
+  ajuste común a los widgets de una página, y la tira de la barra lateral se aparta mientras se muestra; con su
+  interruptor apagado, las herramientas fijadas siguen en la tira. Aparece primero centrada en el borde superior del
+  gráfico. <code>{`features: { favoritesBar: false }`}</code> deja fuera la barra y su botón.
+</p>
 
 <h3>Estilo de dibujo y plantillas</h3>
 <p>
@@ -1043,8 +1091,8 @@ chart.removeIndicator(instanceId)`}</code></pre>
   temporalidades en las que se muestra), con un menú Plantilla, Cancelar y Aceptar
   al pie. Haz clic derecho en un dibujo para ver su menú: configuración, una
   alerta en su línea, orden, agrupar, bloquear, ocultar, duplicar y eliminar. La
-  barra lateral también tiene un borrador, una herramienta de zoom y un imán que
-  puede estar desactivado, débil o fuerte. Consulta
+  barra lateral también tiene un borrador, una herramienta de zoom y un imán, débil
+  o fuerte desde su menú. Consulta
   <a href={href('/docs/drawing-tools')}>Herramientas de dibujo</a> para ver la API que hay debajo.
 </p>
 

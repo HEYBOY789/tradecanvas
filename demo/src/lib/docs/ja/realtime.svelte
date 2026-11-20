@@ -187,7 +187,9 @@ const current = agg.getCurrentBar()         // forming bar`}</code></pre>
   <code>subscribeQuotes</code> を持つフィードは、止めるまで複数のシンボルのクオート（最新価格、当日の変化、高値、安値、
   出来高、買気配と売気配）をまとめて送ります。<code>BinanceAdapter</code> は 24 時間のスナップショットを送ったあと、
   ミニティッカーのストリームを流します。<code>MockAdapter</code> はクオートを生成します。ウィジェットのウォッチリストは、
-  これで各行を埋めます。
+  これで各行を埋めます。クオートがないとき、チャート自身のシンボルの行は、シンボル情報パネルと同じく
+  チャートのバーから価格と当日の値動きを読みます：最後の日の前の終値を基準に、取引所のタイムゾーンで計算し、
+  バーにその前の日がなければ値動きは表示しません。
 </p>
 <pre><code>{`const stop = new BinanceAdapter().subscribeQuotes(['BTCUSDT', 'ETHUSDT'], (quotes) => {
   for (const q of quotes) console.log(q.symbol, q.last, q.changePercent)
@@ -309,7 +311,7 @@ chart.replayStop()             // back to the live series`}</code></pre>
 
 <h3>ChartWidget のリプレイバー</h3>
 <p>
-  ツールバーの<strong>バーリプレイ</strong>ボタンで、メインペインの下端、プロットの中央にコンパクトなバーが開きます（下のペインは読めるまま）。
+  ツールバーの<strong>バーリプレイ</strong>ボタンで、チャートの下、ステータスバーの上にウィジェット幅いっぱいのバーが開きます。チャートがその分の場所を空けるので、出来高、下のペイン、時間軸は見えたままです。
   まず開始足を選びます。足をクリックするか<strong>ランダムなバー</strong>を押します。<strong>キャンセル</strong>（または <kbd>Esc</kbd>）で閉じます。
   その後は、戻る・<strong>再生</strong>/<strong>一時停止</strong>・進む、表示中のステップの日時（表示タイムゾーン、年は今年でないときだけ）、
   再生済み部分を塗ったトラック、<strong>速度</strong>は 0.1×〜50× の倍率（1× はステップに関係なくチャートの足を 1 秒に 1 本、既定は 1×）、

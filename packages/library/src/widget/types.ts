@@ -14,6 +14,7 @@ import type {
   SymbolInfo,
 } from '@tradecanvas/commons';
 import type { Chart } from '../Chart.js';
+import type { ChartPlugin } from '../plugins/contracts.js';
 import type { ChartWidget } from './ChartWidget.js';
 import type { WatchlistList } from './WatchlistStore.js';
 
@@ -53,8 +54,11 @@ export interface ChartWidgetOptions {
   theme?: ThemeName | Theme;
   /**
    * The widget's look: its corners, sizes, type, lines, shadows and bars.
-   * A preset (`'print'`, the default; `'studio'`; `'terminal'`; `'capsule'`; `'desk'`) or your
-   * theme over one. Colours stay with `theme`.
+   * A preset (`'modern'`, the default; `'print'`; `'studio'`; `'terminal'`; `'capsule'`; `'desk'`)
+   * or your theme over one; a theme object without `preset` starts from Modern (`preset: 'print'`
+   * for the look before it). Colours stay with `theme`, but for Modern's: a code editor's dark and
+   * light (`MODERN_DARK_THEME` / `MODERN_LIGHT_THEME` on the chart), in each mode `theme` gave no
+   * object for.
    */
   ui?: import('./widgetUI.js').WidgetUIPreset | import('./widgetUI.js').WidgetUITheme;
 
@@ -244,7 +248,20 @@ export interface ChartWidgetOptions {
    * `numberLocale`, `features` (`priceAxisAddButton`, `replay`…), `chartType`,
    * `overrides`, `priceFormat` and the rest.
    */
-  chartOptions?: Partial<ChartOptions>;
+  chartOptions?: Partial<ChartOptions> & {
+    /** Plugins to install with the chart, as `new Chart` takes them; with the widget's own `plugins`, which win for the same id. */
+    plugins?: ChartPlugin[];
+  };
+
+  /**
+   * Your own indicators, drawing tools, chart types and overlays
+   * (`{ kind: 'indicator', plugin }`…), registered with the chart before the
+   * widget restores anything: a saved layout (`persistLayouts`), a template
+   * or a shared view that names one of your indicators gets it back. With
+   * any `chartOptions.plugins`; for the same id, these win. A grid cell's
+   * own `plugins` replace the grid's shared ones, as its other options do.
+   */
+  plugins?: ChartPlugin[];
 
   /**
    * A watchlist, a panel of the dock beside the chart: lists of symbols, a
@@ -354,6 +371,14 @@ export interface ChartWidgetOptions {
   // Callbacks
   onSymbolChange?: (symbol: string) => void;
   onTimeframeChange?: (tf: TimeFrame) => void;
+  /**
+   * The dock's open panel changed: a built-in one's id or a page's of your
+   * own (`addDockPage`), or `null` when the dock shut. Called however it
+   * changed: the rail, a panel's close button, `openPanel`, a narrow widget
+   * shutting it. One panel opening in place of another is one call, with no
+   * `null` between.
+   */
+  onPanelChange?: (panel: DockPanelId | null) => void;
   /**
    * The widget is built: called once, with its chart and the widget itself,
    * in a microtask after `new ChartWidget()` returns, so the name you give
@@ -634,8 +659,10 @@ export interface SidebarConfig {
 export interface SidebarCallbacks {
   onDrawingTool: (tool: DrawingToolType) => void;
   onCancelDrawing: () => void;
-  /** Omitted when the magnet is switched off (`features.drawingMagnet: false`). Cycles off, weak, strong. */
+  /** Omitted when the magnet is switched off (`features.drawingMagnet: false`). On and off, at the strength last chosen. */
   onToggleMagnet?: () => void;
+  /** The magnet's menu (weak, strong), under its button. */
+  onMagnetMenu?: (anchor: HTMLElement) => void;
   onToggleEraser?: () => void;
   onToggleZoomArea?: () => void;
   onToggleFavorite?: (tool: DrawingToolType) => void;
@@ -645,10 +672,16 @@ export interface SidebarCallbacks {
   onClear: (anchor: HTMLElement) => void;
   /** Lock (true) or unlock every drawing: the button shows when given. */
   onLockAll?: (locked: boolean) => void;
+  /** The lock button's menu (drawings, positions and orders, all), under it. */
+  onLockMenu?: (anchor: HTMLElement) => void;
   /** Hide (true) or show every drawing: the button shows when given. */
   onHideAll?: (hidden: boolean) => void;
+  /** The hide button's menu (drawings, indicators, positions and orders, all), under it. */
+  onHideMenu?: (anchor: HTMLElement) => void;
   onToggleStyle?: () => void;
   onToggleStayInDrawing?: () => void;
+  /** Show or hide the favorites bar floating over the chart. */
+  onToggleFavoritesBar?: () => void;
 }
 
 /** Style keys to set on the user's layer; null takes one away (back to the theme's, or the part's own). */
@@ -777,3 +810,34 @@ export interface DrawingToolGroupDef {
 
 /** A panel of the widget's dock, beside the chart (in a sheet on a phone). */
 export type WidgetPanel = 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder';
+
+/** A panel of the dock: a built-in one, or the id of a page you added with `addDockPage`. */
+export type DockPanelId = WidgetPanel | (string & {});
+
+/** A page of your own in the widget's dock; see `ChartWidget.addDockPage`. */
+export interface DockPageSpec {
+  /**
+   * Tells it apart: `openPanel(id)` opens it, `getOpenPanel()` and
+   * `onPanelChange` report it. Not a built-in panel's id, nor another page's.
+   */
+  id: string;
+  /** Its rail button's accessible name and tooltip, and its header's title. */
+  label: string;
+  /** Its rail button's icon: a built-in icon's name, or an element of your own (an `<svg>`, say). */
+  icon: string | Element;
+  /**
+   * What the page shows, under the dock's header. It is moved into the dock,
+   * hidden until the page opens, and taken out again by `remove()`. The
+   * widget's `--tcw-*` tokens (colours, type, spacing) apply inside it.
+   */
+  element: HTMLElement;
+  /** Called each time the page opens, once it has its size: draw what needs it then. */
+  onShow?: () => void;
+  /** Called each time it shuts, or another panel opens in its place. */
+  onHide?: () => void;
+}
+
+export interface DockPageHandle {
+  /** Take the page away, shutting it first if it is open. Its id is free again. */
+  remove(): void;
+}

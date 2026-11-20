@@ -25,7 +25,7 @@
     <tr><td>지표의 선, 패인의 배경</td><td><code>updateIndicatorStyle(id, {'{ plots }'})</code>, <code>setPaneStyle</code></td></tr>
     <tr><td>위젯의 어떤 부품을 보일지</td><td><code>features</code> / <code>setFeatures</code> — <a href="#switches">아래</a></td></tr>
     <tr><td>사용자가 차트에서 할 수 있는 일: 그리기, 거래, 확대·축소</td><td>차트 자체의 features: <code>chartOptions: {'{ features: { drawings: false } }'}</code></td></tr>
-    <tr><td>직접 만든 버튼, 메뉴, 상태 항목</td><td><code>addToolbarButton</code>, <code>addToolbarDropdown</code>, <code>addSidebarButton</code>, <code>addStatusBarItem</code>, <code>getSlot</code>, 메뉴 훅 — <a href="#parts">아래</a></td></tr>
+    <tr><td>직접 만든 버튼, 메뉴, 상태 항목</td><td><code>addToolbarButton</code>, <code>addToolbarDropdown</code>, <code>addSidebarButton</code>, <code>addStatusBarItem</code>, <code>getSlot</code>, 메뉴 훅 — <a href="#parts">아래</a>; 도크의 페이지는 <code>addDockPage</code> — <a href={href('/docs/api#dock')}>API</a></td></tr>
     <tr><td>직접 만든 키보드 단축키</td><td><code>addHotkey</code> — <a href="#parts">아래</a></td></tr>
     <tr><td>직접 쓰는 CSS</td><td>안정된 훅: <code>--tcw-*</code>, <code>data-tcw-part</code> — <a href="#css">아래</a></td></tr>
     <tr><td>위젯의 문구</td><td><code>locale</code>, <code>messages</code> — <a href="#words">아래</a></td></tr>
@@ -91,7 +91,7 @@ grid.setFeatures({ toasts: false })  // ChartWidgetGrid의 모든 차트`}</code
       <code>orderTicket</code> <code>bracketOrders</code> <code>depthLadder</code> <code>layouts</code>
       <code>indicatorTemplates</code> <code>compare</code> <code>indicatorLegend</code> <code>navigation</code>
       <code>customTimeframes</code> <code>marks</code> <code>intervalTyping</code> <code>symbolTyping</code> <code>dragDropImport</code> <code>hotkeys</code>
-      <code>toasts</code>
+      <code>toasts</code> <code>favoritesBar</code>
     </td></tr>
     <tr><td>툴바</td><td>
       <code>toolbar.symbol</code> <code>toolbar.symbolInfo</code> <code>toolbar.timeframes</code>
@@ -139,7 +139,9 @@ grid.setFeatures({ toasts: false })  // ChartWidgetGrid의 모든 차트`}</code
   </tbody>
 </table>
 <p>
-  이름보다 많은 일을 하는 스위치도 있습니다: <code>indicatorLegend</code>를 끄면 패인에 자기 제목이 돌아옵니다.
+  이름보다 많은 일을 하는 스위치도 있습니다: <code>indicatorLegend</code>를 끄면 패인에 자기 제목이 돌아옵니다. 켜 두면 각 지표의 줄은 마우스를 올리거나
+  키보드 포커스를 받을 때 버튼을 보여 주고, 터치 화면에서는 한 번 탭해 줄을 연 뒤에 보여 줍니다(이어서 이름을 탭하면
+  설정이 열립니다). 그래서 휴대폰에서 버튼이 캔들을 가리지 않습니다.
   <code>menu.chart.*</code>는 오른쪽 클릭 메뉴와 가격 축 옆의 "+" 모두에 적용됩니다. <code>compare</code>는 객체 트리의
   추가 버튼을 없애고, 이미 켜진 비교는 목록에 남습니다. <code>toasts</code>는 위젯 자체의 알림을 끄고(오류는 계속 보입니다),
   <code>widget.toast()</code>로 띄운 알림은 그대로 보입니다.

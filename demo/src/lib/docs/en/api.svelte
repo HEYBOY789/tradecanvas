@@ -79,7 +79,7 @@
     <tr><td><code>removeIndicators(instanceIds)</code></td><td>Remove several, as one undo step.</td></tr>
     <tr><td><code>removeAll(what?)</code></td><td>Every drawing (<code>'drawings'</code>), every indicator (<code>'indicators'</code>) or both (<code>'all'</code>), as one undo step; locked drawings stay. Returns how many of each went.</td></tr>
     <tr><td><code>takeBackDrawing(id)</code></td><td>Take back a drawing just made, as a Cancel right after it: with the step that made it when that is the last one, so nothing is left to undo or redo. The <code>drawingCreate</code> event says <code>drawn: true</code> for a drawing the pointer just made.</td></tr>
-    <tr><td><code>updateIndicatorStyle(instanceId, style)</code></td><td>Colours, line widths, opacity, and each plot's dash and visibility (<code>plots: {`{ signal: { lineStyle: 'dashed' } }`}</code>).</td></tr>
+    <tr><td><code>updateIndicatorStyle(instanceId, style)</code></td><td>Colours, line widths, opacity, and each plot's dash and visibility (<code>plots: {`{ signal: { lineStyle: 'dashed' } }`}</code>), and a markers plot's <code>shape</code> and <code>size</code>.</td></tr>
     <tr><td><code>setIndicatorDefaults(id, style | null)</code></td><td>The style indicators of a kind start with from now on.</td></tr>
     <tr><td><code>setIndicatorIntervals(instanceId, intervals | null)</code> · <code>getIndicatorIntervals(instanceId)</code></td><td>The intervals it shows on (<code>{`{ minutes: false, hours: [1, 4] }`}</code>); <code>null</code>: all of them. Saved with the layout.</td></tr>
     <tr><td><code>setDataTimeframe(timeframe | null)</code></td><td>The interval of bars set with <code>setData</code>: the legend names it, and indicators kept to some intervals follow it.</td></tr>
@@ -171,7 +171,7 @@ chart.setTimeFormatter((time, { kind, timeZone }) =>
 
 <h3 id="axis-labels">How the axes choose their labels</h3>
 <p>
-  The time axis labels the bars that start the largest calendar steps: a year (in bold), a month, a day, a round hour, at least 80 px apart. So at 5Y it reads <code>2022 · Jul · 2023</code>, at a month <code>Oct · 8 · 15</code>, within a day <code>12:00 · 18:00</code>. The labels belong to bars, not to the screen: panning moves them with their bars, and history loaded in front leaves them where they were. Left of the oldest bar there are none. Month names follow <code>setNumberLocale</code>, and the grid's lines go where the labels are.
+  The time axis labels the bars that start the largest calendar steps: a year (in bold), a month, a day, a round hour, at least 80 px apart. So at 5Y it reads <code>2022 · Jul · 2023</code>, at a month <code>Oct · 8 · 15</code>, within a day <code>12:00 · 18:00</code>. The labels belong to bars, not to the screen: panning moves them with their bars, and history loaded in front leaves them where they were. Left of the oldest bar there are none. Where no new year is labelled, a tag at the left end, in the style of the timezone tag at the right, writes what the labels leave out, as of the first bar on view: the year among months, <code>Mar 2023</code> among days, the whole date among the times of one day. Over a label at the left end it stands in for it and says what it said (<code>Mar 2023</code> over <code>Mar</code>). Panned back into history, the year is always on the axis. Month names follow <code>setNumberLocale</code>, and the grid's lines go where the labels are.
 </p>
 <p>
   The price scale fits as many labels as its height does, at least 30 px apart, on the market's price step. On a log scale its step grows with the price, so the bottom is labelled as well as the top; on a percent or indexed scale its labels are round percents or index points from the baseline. Indicator panes count their labels by their height too.
@@ -553,8 +553,13 @@ widget.destroy()`}</code></pre>
     </td></tr>
     <tr><td>Drawing tools</td><td>
       Each group's menu names its tools' shortcuts (Alt+T a trend line) and has a star on each row to pin it to the
-      top. At the bottom: the drawing style, the magnet, the eraser, the zoom area, staying in drawing mode, lock
-      all, hide all, and the trash button: its menu removes the drawings, the indicators or both, each with how many, in one undo step.
+      top. At the bottom: the drawing style, the magnet, the eraser, the zoom area, staying in drawing mode, lock,
+      hide, and the trash button: its menu removes the drawings, the indicators or both, each with how many, in one undo step.
+      The magnet, lock and hide buttons each have a menu in their corner (or a right click, or an arrow key): the
+      magnet's picks weak or strong, and the button turns the magnet on at it and off; the lock's locks the drawings,
+      the positions and orders, or all; the hide's hides the drawings, the indicators, the positions and orders, or
+      all, ticking what is hidden. What a menu picks is what its button does from then on. Hiding the indicators
+      hides the ones that showed, and showing them again brings back those only.
     </td></tr>
     <tr><td>Status bar</td><td>
       Range presets and go to date; the market's status, the connection, a clock in the display time zone (it
@@ -587,9 +592,30 @@ widget.destroy()`}</code></pre>
   <strong>ⓘ</strong> by the symbol, and any panel from your own code. The charts of a
   <code>ChartWidgetGrid</code> have no rail each, unless its <code>widget.features</code> turn <code>dock</code> on.
 </p>
-<pre><code>{`widget.openPanel('watchlist')   // 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder'; false if not there
+<p>
+  A page of your own goes in the same dock with <code>addDockPage</code>: its button on the rail after the
+  built-in ones, and your element under the dock's header (its label and a close button), in the widget's
+  <code>--tcw-*</code> tokens. <code>openPanel(id)</code> opens it, <code>getOpenPanel()</code> reports it, and
+  <code>onShow</code> is called each time it opens, once it has its size. <code>remove()</code> takes it away,
+  shutting it first if it is open. On a phone there is no rail, as for the built-in panels: open it from a control
+  of yours. An id a built-in panel or another page has gives <code>null</code>. The <code>onPanelChange</code>
+  option is told the open panel's id, or <code>null</code>, however it changed: the rail, a close button, your code,
+  a widget turning narrow.
+</p>
+<pre><code>{`widget.openPanel('watchlist')   // 'watchlist' | 'alerts' | 'objectTree' | 'dataWindow' | 'symbolInfo' | 'depthLadder', or a page's id; false if not there
 widget.getOpenPanel()           // the panel open, or null
 widget.closePanel()
+
+const figures = document.createElement('div')
+const page = widget.addDockPage({
+  id: 'figures', label: 'Key figures', icon: 'info', element: figures,   // icon: a built-in name or an <svg> of yours
+  onShow: () => drawFigures(figures, widget.getSymbol()),
+  onHide: () => {},
+})
+widget.openPanel('figures')
+page.remove()
+
+new ChartWidget(host, { onPanelChange: (panel) => keepOpenPanel(panel) })   // 'figures', 'watchlist'… or null
 
 new ChartWidget(host, { features: { dock: false } })              // no rail: the toolbar opens the panels
 new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button for the data window`}</code></pre>
@@ -600,7 +626,8 @@ new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button 
   or a letter typed on the chart, which it starts with. It lists your <code>symbols</code> until something is
   typed, then asks your feed's search (<code>searchSymbols</code>, or the adapter's) once typing pauses. A row starts
   with a badge (the symbol's logo, else the first letter of its ticker in its kind's colour), then the symbol, its
-  name, its kind and its exchange in columns, the chart's own marked. Tabs keep the list to one kind (stocks, crypto)
+  name, its kind and its exchange in columns, the chart's own marked. On a phone the exchange goes under the
+  ticker, so a long one (SIMULATED, ALL VENUES) reads whole and tells two venues' rows apart. Tabs keep the list to one kind (stocks, crypto)
   and stay put as you type; when the rows come from two or more exchanges, a list beside them keeps it to one. Both
   narrow the rows on hand and do not search again: a search returns a page of results (the adapter's is asked for
   50), so HNX picked after typing <code>V</code> shows the HNX ones among them, not every HNX symbol with a V. The
@@ -620,6 +647,18 @@ new ChartWidget(host, { features: { 'dock.dataWindow': false } })  // no button 
     'FPT',   // a ticker alone, as before
   ],
 })`}</code></pre>
+<p>
+  A <code>last</code> price and a day's <code>changePercent</code> on a symbol, given with your
+  <code>symbols</code> or in a search's results, show in two columns of their own at the end of its row (on a phone,
+  the change under the price), the change in the up or down colour; when no row listed has either, the columns are
+  left out. A number is written in the symbol's <code>pricePrecision</code> decimals, else by its size, in the
+  widget's number locale; text is written as it is. The widget fetches none of them: your app gives what it has. A
+  search's figures show while its results do and are not kept for the next time the search opens.
+</p>
+<pre><code>{`widget.setSymbols([
+  { symbol: 'BTCUSDT', exchange: 'Binance', last: 61668.46, changePercent: 0.37 },
+  { symbol: 'VCB', exchange: 'HOSE', last: 61.2, pricePrecision: 2, changePercent: -0.65 },
+])`}</code></pre>
 <p>
   A <code>logo</code> is an <code>https:</code> or <code>http:</code> address, a path on your site, a
   <code>blob:</code> URL or an image written in <code>data:</code> (PNG, JPEG, GIF, WebP, AVIF or SVG); anything
@@ -971,6 +1010,13 @@ widget.toggleSymbolInfo(true)`}</code></pre>
 <pre><code>{`new ChartWidget(host, {
   drawingFavorites: ['trendLine', 'horizontalLine', 'fibRetracement', 'rectangle'],
 })`}</code></pre>
+<p>
+  The star button on the sidebar shows the pinned tools as a <strong>favorites toolbar</strong> floating over the
+  chart instead: drag its grip to put it anywhere on the chart, press a tool to pick it, right-click one to
+  unpin it. Whether it shows and where it was left are kept in this browser, one setting for the widgets of a page, and
+  the sidebar's strip steps aside while it shows; with its switch off the pins stay on the strip. It first appears centred at the chart's top. <code>{`features: { favoritesBar: false }`}</code>
+  leaves out the bar and its button.
+</p>
 
 <h3>Drawing style &amp; templates</h3>
 <p>
@@ -1012,7 +1058,7 @@ chart.removeIndicator(instanceId)`}</code></pre>
   Right-click a drawing for
   its menu: settings, an alert on its line, order, group, lock, hide,
   duplicate and delete. The sidebar also has an eraser, a zoom tool and a
-  magnet that goes off, weak and strong. See
+  magnet, weak or strong from its menu. See
   <a href={href('/docs/drawing-tools')}>Drawing tools</a> for the API underneath.
 </p>
 

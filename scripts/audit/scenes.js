@@ -27,6 +27,8 @@ const scene = params.get('scene') ?? 'orderAtPrice';
 const theme = params.get('theme') ?? 'dark';
 // The widgets' look: `?ui=desk` (Print without it).
 const ui = params.get('ui') ?? undefined;
+// The widgets' language: `?locale=vi` (English without it).
+const locale = params.get('locale') ?? undefined;
 const host = document.getElementById('host');
 
 const market = (symbol) => new MockAdapter({ basePrice: PRICES[symbol] ?? 100, volatility: 0.9, tickInterval: 60_000, historySize: HISTORY });
@@ -39,7 +41,7 @@ const loaded = (chart) => new Promise((resolve) => {
 /** A widget whose feed stops once its bars are in, so nothing moves while it is looked at. */
 async function widget(options = {}) {
   const symbol = options.symbol ?? 'BTCUSDT';
-  const w = new ChartWidget(host, { symbol, timeframe: '5m', theme, ui, adapter: market(symbol), historyLimit: HISTORY, ...options });
+  const w = new ChartWidget(host, { symbol, timeframe: '5m', theme, ui, locale, adapter: market(symbol), historyLimit: HISTORY, ...options });
   const chart = w.getChart();
   await loaded(chart);
   chart.disconnectStream();
@@ -198,6 +200,22 @@ const SCENES = {
     return s;
   },
 
+  /** Long/Short Positions played over the bars: a long selected (its four handles), a short, one running past the last bar. */
+  async positions() {
+    const s = await widget();
+    const bars = s.chart.getData();
+    const back = (n) => bars[bars.length - n];
+    const position = (from, to, stopBy) => s.chart.addDrawing({
+      type: 'riskReward',
+      anchors: [{ time: back(from).time, price: back(from).close }, { time: to > 0 ? back(to).time : back(1).time + -to * 60_000, price: back(from).close * stopBy }],
+    });
+    const long = position(150, 90, 0.997);
+    position(80, 30, 1.003);
+    position(20, -15, 0.998);
+    s.chart.selectDrawing(long);
+    return s;
+  },
+
   /** A trend line selected in the RSI pane: its span on the pane's own axis. */
   async selectedPaneDrawing() {
     const s = await widget();
@@ -255,6 +273,144 @@ const SCENES = {
     const level = (i, side) => ({ price: last + side * (i + 1) * step, volume: 1 + ((i * 7) % 5) + (i === 6 ? 14 : 0) });
     const levels = Array.from({ length: 24 }, (_, i) => i);
     s.chart.setDepthData({ bids: levels.map((i) => level(i, -1)), asks: levels.map((i) => level(i, 1)) });
+    return s;
+  },
+
+  /** Daily bars panned back to a spring three years ago: months on view and no January, so the year is the date tag's. */
+  async historyDaily() {
+    const s = await widget({ timeframe: '1d', adapter: new MockAdapter({ basePrice: 100, volatility: 0.9, tickInterval: 86_400_000, historySize: 1500 }), historyLimit: 1500 });
+    const year = new Date(s.chart.getData().at(-1).time).getUTCFullYear() - 3;
+    s.chart.setVisibleRange(Date.UTC(year, 2, 1), Date.UTC(year, 6, 1));
+    return s;
+  },
+
+  /** Hourly bars panned back a few days into an earlier month: days on view and no month, so the tag gives month and year. */
+  async historyHourly() {
+    const s = await widget({ timeframe: '1h', adapter: new MockAdapter({ basePrice: 100, volatility: 0.9, tickInterval: 3_600_000, historySize: 1500 }), historyLimit: 1500 });
+    const data = s.chart.getData();
+    s.chart.setVisibleRange(data[200].time, data[300].time);
+    return s;
+  },
+
+  /** A page of the host's own open in the dock, after the built-in ones: the dock's header over the host's element. */
+  async dockPage() {
+    const s = await widget({ watchlist: true, symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'] });
+    const figures = document.createElement('dl');
+    figures.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:8px 16px;margin:0;padding:12px 16px;font-variant-numeric:tabular-nums';
+    for (const [label, value] of [['P/E', '12.4'], ['EPS', '5,180'], ['ROE', '18.2%'], ['Dividend yield', '2.1%'], ['Market cap', '1.2T']]) {
+      const dt = document.createElement('dt');
+      dt.textContent = label;
+      dt.style.color = 'var(--tcw-text-muted)';
+      const dd = document.createElement('dd');
+      dd.textContent = value;
+      dd.style.margin = '0';
+      figures.append(dt, dd);
+    }
+    s.widget.addDockPage({ id: 'figures', label: 'Key figures', icon: 'table', element: figures });
+    s.widget.openPanel('figures');
+    return s;
+  },
+
+  /** The watchlist open on daily bars with no quotes: the chart's own row shows the day's move, not the move since its first bar. */
+  async watchlistOwnRow() {
+    const s = await widget({
+      timeframe: '1d',
+      adapter: new MockAdapter({ basePrice: 100, volatility: 0.9, tickInterval: 86_400_000, historySize: 150 }),
+      historyLimit: 150,
+      symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+      watchlist: { quotes: false },
+    });
+    s.widget.openPanel('watchlist');
+    // The row is filled on the watchlist's tick, once a second.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    return s;
+  },
+
+  /** A position with no stop-loss or take-profit, and one with only a stop: SL and TP buttons on the entries' tags. */
+  async positionAddStops() {
+    const s = await widget({ trading: true });
+    const last = lastClose(s.chart);
+    const broker = new PaperExecutionAdapter({ markPrice: last });
+    s.chart.connectExecution(broker, { brackets: 'event' });
+    await broker.placeOrder({ side: 'buy', type: 'market', price: last, quantity: 1 });
+    await broker.placeOrder({ side: 'sell', type: 'market', price: last, quantity: 2, stopLoss: last * 1.004 });
+    return s;
+  },
+
+  /** The favorites toolbar shown over the chart, with four pinned tools and one of them in use. */
+  async favoritesBar() {
+    localStorage.removeItem('tcw:favoritesBar');
+    const s = await widget({ drawingFavorites: ['trendLine', 'horizontalLine', 'fibRetracement', 'rectangle'] });
+    document.querySelector('[data-role="favoritesBar"]')?.click();
+    document.querySelector('.tcw-favorites-bar [data-tool-value="fibRetracement"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return s;
+  },
+
+  /** The hide button's menu open on the drawing sidebar, an indicator hidden from it, a position on the chart. */
+  async sidebarMenus() {
+    const s = await widget({ trading: true });
+    const last = lastClose(s.chart);
+    const broker = new PaperExecutionAdapter({ markPrice: last });
+    s.chart.connectExecution(broker, { brackets: 'event' });
+    await broker.placeOrder({ side: 'buy', type: 'market', price: last, quantity: 1, stopLoss: last * 0.996 });
+    s.chart.addIndicator('ema', { period: 20 });
+    document.querySelector('[data-menu-for="hideAll"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return s;
+  },
+
+  /**
+   * Panes of millions under prices of tens of thousands (A/D and OBV, as a CVD pane): their tags share
+   * the price axis, which was sized to the prices alone and cut them ("-1,766,028.").
+   */
+  async paneMillions() {
+    const s = await widget();
+    for (const id of ['ad', 'obv']) s.chart.addIndicator(id);
+    s.chart.setIndicatorValueLabelsVisible(true);
+    return s;
+  },
+
+  /**
+   * The symbol search open on symbols with their last price and day's change, two venues listing the
+   * same ticker and exchanges of ten letters: on a phone the exchange was cut ("SIMULA…").
+   */
+  async symbolSearch() {
+    const s = await widget({
+      symbols: [
+        { symbol: 'BINANCE:BTCUSDT', description: 'Bitcoin / Tether', exchange: 'Binance', type: 'crypto', last: 61668.46, changePercent: 0.37 },
+        { symbol: 'SIM:BTCUSDT', description: 'Bitcoin / Tether', exchange: 'SIMULATED', type: 'crypto', last: 61670.1, changePercent: 0.4 },
+        { symbol: 'SIM:ETHUSDT', description: 'Ether / Tether', exchange: 'ALL VENUES', type: 'crypto', last: 3021.55, changePercent: -1.84 },
+        { symbol: 'SOLUSDT', description: 'Solana / Tether', exchange: 'Binance', type: 'crypto', last: 142.318, changePercent: 0 },
+        { symbol: 'VCB', description: 'Ngân hàng TMCP Ngoại thương Việt Nam', exchange: 'HOSE', type: 'stock', last: 61.2, pricePrecision: 2, changePercent: -0.65 },
+        { symbol: 'XAUUSD', description: 'Gold spot', exchange: 'OANDA', type: 'forex' },
+      ],
+    });
+    document.querySelector('.tcw-toolbar-symbol')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return s;
+  },
+
+  /**
+   * The candles hidden (transparent) under an overlay that draws its own, the legend's up and down set
+   * apart: the legend's close and change went with the candles before `legend.upColor`/`downColor`.
+   */
+  async hiddenCandles() {
+    const s = await widget();
+    const hidden = 'rgba(0, 0, 0, 0)';
+    s.chart.applyOverrides({
+      'series.candlestick.upColor': hidden,
+      'series.candlestick.downColor': hidden,
+      'legend.upColor': '#3fbd9c',
+      'legend.downColor': '#fa686a',
+    });
+    return s;
+  },
+
+  /** Williams Fractals: its marks were dots lost in the wicks; now triangles clear of the bars. */
+  async fractals() {
+    const s = await widget();
+    s.chart.addIndicator('fractals', { period: 2 });
     return s;
   },
 
