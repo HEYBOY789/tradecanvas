@@ -440,7 +440,7 @@ export function createMt5Trading(getActiveWidget) {
       positions: state?.positions.filter(row => row.symbol === widget.getSymbol()) || [],
       draftPrices: ticket.read().widget === widget && ticket.read().draft?.type !== 'market'
         ? ['price', 'stopPrice', 'stopLoss', 'takeProfit'].map(field => ticket.read().draft?.[field]) : [],
-      quote: state?.quotes[widget.getSymbol()], accountId: state?.account.id }), (target, moved, field, accountId) => {
+      quote: state?.quotes[widget.getSymbol()], accountId: state?.account.id, currency: state?.account.currency }), (target, moved, field, accountId) => {
       const row = target.row;
       if (target.kind === 'position') return review('modifyPosition', { positionId: row.id, [field]: moved[field] }, row.symbol, accountId).catch(report);
       const intent = { orderId: row.id, newPrice: moved.stopPrice ?? moved.price, previousPrice: row.stopPrice ?? row.price };

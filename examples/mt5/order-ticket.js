@@ -338,7 +338,8 @@ export function createOrderTicket({ account, quoteFor, estimate: calculate, send
     },
     change, close, submit,
     update(patch, source = 'form') { if (!draft || sending) return; Object.assign(draft, patch); onChange(draft, source); schedule(); render(); },
-    read: () => ({ draft, widget, quote: currentQuote(), estimate, sending, submitStatus: draft ? submitStatus() : null, accountId: account()?.id }),
+    read: () => ({ draft, widget, quote: currentQuote(), estimate, sending, submitStatus: draft ? submitStatus() : null,
+      accountId: account()?.id, currency: account()?.currency }),
     refresh() {
       if (!draft) return;
       const q = currentQuote();

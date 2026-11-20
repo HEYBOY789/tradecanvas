@@ -110,6 +110,29 @@ class TradingTests(unittest.TestCase):
         self.assertAlmostEqual(result['tickValue'], .001)
         self.assertAlmostEqual(result['notional'], 100)
 
+    def test_quote_exit_profit_uses_broker_conversion_for_either_side(self):
+        self.broker.account.currency = 'EUR'
+
+        def converted(side, symbol, volume, entry, close):
+            move = (close - entry) * (1 if side == 0 else -1)
+            return move * volume * ({0: (90, 95), 1: (80, 85)}[side][move < 0])
+
+        self.broker.order_calc_profit = converted
+        snapshot = self.service.state(['TEST'])
+        self.assertEqual(snapshot['account']['currency'], 'EUR')
+        rates = snapshot['quotes']['TEST']['exitProfitRates']
+        for side, profit, loss in [('buy', 90, 95), ('sell', 80, 85)]:
+            self.assertAlmostEqual(rates[side]['profit'], profit)
+            self.assertAlmostEqual(rates[side]['loss'], loss)
+        self.broker.order_check.assert_not_called()
+        self.broker.order_send.assert_not_called()
+
+    def test_quote_remains_available_when_broker_cannot_estimate_profit(self):
+        self.broker.order_calc_profit = lambda *args: None
+        quote = self.service.state(['TEST'])['quotes']['TEST']
+        self.assertEqual(quote['bid'], 100)
+        self.assertEqual(quote['exitProfitRates'], {})
+
     def test_account_switch_during_preflight_never_reaches_order_send(self):
         def checked(request):
             self.broker.account.login = 99

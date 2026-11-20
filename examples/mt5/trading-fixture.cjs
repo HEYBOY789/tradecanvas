@@ -16,7 +16,8 @@ exports.tradingPage = async function tradingPage(browser, options = {}) {
     if (url.pathname.endsWith('/session')) result = { key: 'test-key' };
     else if (url.pathname.endsWith('/state')) {
       const quotes = Object.fromEntries((url.searchParams.get('symbols') || 'XAUUSDm').split(',').map(symbol => [symbol,
-        { bid: 3800, ask: 3800.01, min: .01, max: 200, step: .01, tickSize: .001, digits: 3, orderMode: 127, expirationMode: 15, ...fixture.quote }]));
+        { bid: 3800, ask: 3800.01, min: .01, max: 200, step: .01, tickSize: .001, digits: 3, orderMode: 127, expirationMode: 15,
+          exitProfitRates: { buy: { profit: 100, loss: 100 }, sell: { profit: 100, loss: 100 } }, ...fixture.quote }]));
       result = { account, positions: fixture.positions, orders: fixture.orders, quotes };
       if (fixture.pauseNextState) {
         fixture.pauseNextState = false;
@@ -35,7 +36,7 @@ exports.tradingPage = async function tradingPage(browser, options = {}) {
       if (i.quantityMode === 'riskAmount') quantity = Math.floor(i.quantity / riskPerLot * 100) / 100;
       const risk = riskPerLot == null ? null : riskPerLot * quantity;
       const reward = i.takeProfit == null ? null : Math.abs(i.takeProfit - entry) * 100 * quantity;
-      result = { quantity, entry, currency: 'USD', risk, reward, ratio: risk && reward ? reward / risk : null,
+      result = { quantity, entry, currency: account.currency, risk, reward, ratio: risk && reward ? reward / risk : null,
         margin: quantity * 100, marginFree: account.marginFree, leverage: account.leverage, tickValue: quantity * .1, notional: quantity * 100 * entry };
     } else if (url.pathname.endsWith('/check')) {
       const command = route.request().postDataJSON(); checked.push(command);

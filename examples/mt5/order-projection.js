@@ -5,7 +5,8 @@ export function orderProjection(widget, read, change, submit, cancel, bracketMod
     draft: true, disabled: () => read().sending, change, submit, cancel, bracketMode, update,
     read() {
       const current = read(), draft = current.draft;
-      return { quote: current.quote, accountId: current.accountId, quantity: current.estimate?.quantity, submitStatus: current.submitStatus,
+      return { quote: current.quote, accountId: current.accountId, currency: current.currency, estimate: current.estimate,
+        quantity: current.estimate?.quantity, submitStatus: current.submitStatus,
         targets: draft && draft.type !== 'market' && widget.getSymbol() === draft.symbol
           ? [{ key: 'draft', kind: 'draft', row: draft }] : [] };
     },
@@ -18,7 +19,7 @@ export function pendingStopHandles(widget, read, complete, disabled, activate, b
     disabled, activate, bracketMode, error,
     read() {
       const current = read();
-      return { quote: current.quote, accountId: current.accountId, blockedPrices: current.draftPrices,
+      return { quote: current.quote, accountId: current.accountId, currency: current.currency, blockedPrices: current.draftPrices,
         targets: [
           ...current.orders.map(row => ({ key: `order:${row.id}`, kind: 'order', row })),
           ...(current.positions || []).map(row => ({ key: `position:${row.id}`, kind: 'position', row })),

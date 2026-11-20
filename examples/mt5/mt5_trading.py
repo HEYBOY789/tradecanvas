@@ -86,7 +86,8 @@ class Mt5Trading:
                                       stops=info.trade_stops_level * info.point,
                                       freeze=getattr(info, 'trade_freeze_level', 0) * info.point,
                                       contractSize=info.trade_contract_size, orderMode=info.order_mode,
-                                      expirationMode=info.expiration_mode)
+                                      expirationMode=info.expiration_mode,
+                                      exitProfitRates=self.exit_profit_rates(info, tick))
             positions = [dict(id=str(p.ticket), symbol=p.symbol, side='buy' if p.type == 0 else 'sell',
                               entryPrice=p.price_open, quantity=p.volume, stopLoss=p.sl or None,
                               takeProfit=p.tp or None, profit=p.profit, swap=p.swap)
@@ -301,6 +302,29 @@ class Mt5Trading:
         if request.get('tp') and (request['tp'] < entry + gap - eps if buy else request['tp'] > entry - gap + eps):
             raise TradingError('TP nằm sai phía hoặc quá gần mức tham chiếu Bid/Ask/Entry.')
 
+    def calc_profit(self, side, symbol, volume, entry, close):
+        value = self.mt5.order_calc_profit(side, symbol, volume, entry, close)
+        return float(value) if value is not None and math.isfinite(value) else None
+
+    def exit_profit_rates(self, info, tick):
+        """Account-currency amount per lot and price unit for responsive exit previews."""
+        if not tick or not (0 < tick.bid <= tick.ask):
+            return {}
+        step = info.trade_tick_size or info.point
+        volume = min(info.volume_max, max(info.volume_min, 1.0))
+        rates = {}
+        for side, native_side, entry, direction in (
+            ('buy', self.mt5.ORDER_TYPE_BUY, tick.ask, 1),
+            ('sell', self.mt5.ORDER_TYPE_SELL, tick.bid, -1),
+        ):
+            # A wider move avoids cash rounding to zero for very small ticks.
+            move = min(entry / 2, max(step * 100, entry * .001))
+            profit = self.calc_profit(native_side, info.name, volume, entry, entry + direction * move)
+            loss = self.calc_profit(native_side, info.name, volume, entry, entry - direction * move)
+            if profit is not None and profit > 0 and loss is not None and loss < 0:
+                rates[side] = dict(profit=profit / volume / move, loss=-loss / volume / move)
+        return rates
+
     def estimate(self, command):
         """Account-currency estimates, never order_check/order_send or a terminal permission change."""
         with self.feed.lock:
@@ -324,8 +348,7 @@ class Mt5Trading:
             minimum = info.volume_min
             reference_volume = min(info.volume_max, max(minimum, 1.0))
             def profit(close, volume=reference_volume):
-                value = self.mt5.order_calc_profit(side, info.name, volume, entry, close)
-                return float(value) if value is not None and math.isfinite(value) else None
+                return self.calc_profit(side, info.name, volume, entry, close)
             risk_unit = profit(sl) if sl else None
             tick_size = info.trade_tick_size or info.point
             # MT5 rounds profit to account-currency decimals. A minimum lot

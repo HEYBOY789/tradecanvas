@@ -47,13 +47,13 @@ async function accepted(page, action) {
   await page.waitForFunction(() => !document.querySelector('[aria-label="Mua nhanh MT5"]').disabled);
 }
 
-async function checkStopReadout(page, field, price, entry) {
+async function checkStopReadout(page, field, price, entry, lots, currency = 'USD') {
   const readout = page.locator('.mt5-stop-drag-readout:visible');
   await readout.waitFor({ timeout: 2000 });
   const formatted = await page.evaluate(price => testGrid.getWidget(0).getChart().formatPrice(price), price);
-  const pips = Math.abs(price - entry) / .01;
-  const formattedPips = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 8 }).format(pips);
-  assert.equal(await readout.textContent(), `${field} ${formatted} · ${formattedPips} pip từ Entry`);
+  const profit = (price - entry) * lots * 100;
+  const formattedProfit = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero' }).format(profit);
+  assert.equal(await readout.textContent(), `${field} ${formatted} · ≈ ${formattedProfit} ${currency}`);
   return readout;
 }
 
@@ -70,11 +70,11 @@ test('middle-drag from draft Entry creates SL/TP without enabling a mode or movi
     await page.mouse.move(entry.x, entry.y); await page.mouse.down({ button: 'middle' });
     await page.mouse.move(entry.x, entry.y + 20, { steps: 3 });
     const firstSL = Number(await ticket.locator('[name=stopLoss]').inputValue());
-    await checkStopReadout(page, 'SL', firstSL, 3760);
+    await checkStopReadout(page, 'SL', firstSL, 3760, .01);
     await page.mouse.move(entry.x, entry.y + 35, { steps: 3 });
     const sl = Number(await ticket.locator('[name=stopLoss]').inputValue());
     assert.notEqual(sl, firstSL);
-    const readout = await checkStopReadout(page, 'SL', sl, 3760);
+    const readout = await checkStopReadout(page, 'SL', sl, 3760, .01);
     await page.mouse.up({ button: 'middle' }); await readout.waitFor({ state: 'hidden' });
     assert.ok(sl > 0 && sl < 3760, `middle-drag must create SL below Entry, got ${sl}; Entry=${await ticket.locator('[name=price]').inputValue()}`);
     assert.equal(Number(await ticket.locator('[name=price]').inputValue()), 3760);
@@ -193,7 +193,7 @@ test('left-drag from a filled Entry sets an exit without switching modes or movi
     await page.mouse.move(entry.x, await yAt(3806), { steps: 6 });
     await page.locator('.mt5-stop-drag-readout:visible').waitFor({ timeout: 2000 });
     const previewSL = await page.evaluate(() => testGrid.getWidget(0).getChart().getPositions()[0].stopLoss);
-    const readout = await checkStopReadout(page, 'SL', previewSL, 3800);
+    const readout = await checkStopReadout(page, 'SL', previewSL, 3800, .02);
     assert.equal(fixture.checked.length, 0);
     await page.mouse.up(); await readout.waitFor({ state: 'hidden' });
     const review = page.locator('#mt5-review'); await review.waitFor({ timeout: 3000 });
@@ -210,7 +210,7 @@ test('left-drag from a filled Entry sets an exit without switching modes or movi
     await page.mouse.move(tag.x, tag.y + await yAt(3835) - entry.y, { steps: 6 });
     await readout.waitFor({ timeout: 2000 });
     const previewTP = await page.evaluate(() => testGrid.getWidget(0).getChart().getPositions()[0].takeProfit);
-    await checkStopReadout(page, 'TP', previewTP, 3800);
+    await checkStopReadout(page, 'TP', previewTP, 3800, .02);
     await page.mouse.up(); await readout.waitFor({ state: 'hidden' });
     await review.waitFor({ timeout: 3000 });
     const tp = fixture.checked.at(-1).intent;

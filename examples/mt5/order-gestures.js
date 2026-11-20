@@ -1,8 +1,8 @@
 import { priceToY, yToPrice } from '@tradecanvas/core';
-import { bracketSide, pipSize, roundPrice, valueInUnit } from './order-model.js';
+import { bracketSide, roundPrice } from './order-model.js';
 import { closingQuote, projectOrder, tradeIssue } from './order-rules.js';
 
-const pipFormat = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 8 });
+const moneyFormat = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero' });
 
 // One pointer owner handles entry, bracket and individual-stop drags. Drafts
 // edit only their model; a live trade changes only after the drop is submitted.
@@ -90,16 +90,25 @@ export function tradeGestures(widget, options) {
     const row = projectOrder(original, field, drag.price, quote, kind);
     return { field, row };
   }
-  function renderStopReadout(proposed, viewport) {
+  function renderStopReadout(proposed, viewport, current, activeTarget) {
     const { field, row } = proposed ?? {};
     const price = row?.[field];
     if (layer.hidden || drag?.finished || (field !== 'stopLoss' && field !== 'takeProfit') || !(price > 0)) {
       stopReadout.hidden = true;
       return;
     }
-    const entry = row.entryPrice ?? row.price, pip = pipSize(widget.getSymbol());
-    const distance = pip && entry > 0 ? Math.abs(valueInUnit(price, 'pips', entry, { pipSize: pip }, row.side, field)) : null;
-    const text = `${names[field]} ${chart.formatPrice(price)}${distance == null ? '' : ` · ${pipFormat.format(distance)} pip từ Entry`}`;
+    const live = activeTarget?.kind !== 'draft' ? activeTarget?.row : null;
+    const entry = live?.entryPrice ?? row.entryPrice ?? row.price;
+    const sizedByBroker = row.quantityMode && row.quantityMode !== 'lots';
+    const quantity = sizedByBroker ? current.estimate?.quantity : live?.quantity ?? row.quantity;
+    const move = (price - entry) * (row.side === 'buy' ? 1 : -1);
+    const rate = current.quote.exitProfitRates?.[row.side]?.[move < 0 ? 'loss' : 'profit'];
+    const estimated = field === 'stopLoss' ? current.estimate?.risk : current.estimate?.reward;
+    const profit = Number.isFinite(estimated) ? (field === 'stopLoss' ? -estimated : estimated)
+      : quantity > 0 ? move * quantity * rate : NaN;
+    const amount = Number.isFinite(profit) && current.currency ? `≈ ${moneyFormat.format(profit)} ${current.currency}`
+      : sizedByBroker && current.submitStatus.waiting ? 'Đang tính lãi/lỗ…' : 'Chưa tính được lãi/lỗ';
+    const text = `${names[field]} ${chart.formatPrice(price)} · ${amount}`;
     if (stopReadout.textContent !== text) stopReadout.textContent = text;
     stopReadout.dataset.field = field;
     stopReadout.style.setProperty('--stop-drag-y', `${priceToY(price, viewport) - viewport.chartRect.y}px`);
@@ -152,7 +161,8 @@ export function tradeGestures(widget, options) {
   function render() {
     if (stopped) return;
     const current = options.read();
-    if (drag && (current.accountId !== drag.account || !current.targets.some(target => target.key === drag.target.key))) {
+    const activeTarget = drag && current.targets.find(target => target.key === drag.target.key);
+    if (drag && (current.accountId !== drag.account || !activeTarget)) {
       drag = null; options.restore?.();
     }
     if (!current.targets.length && !controls.size && !options.draft) { layer.hidden = true; timer = setTimeout(render, 100); return; }
@@ -163,7 +173,7 @@ export function tradeGestures(widget, options) {
     const livePrices = options.draft ? [...chart.getOrders(), ...chart.getPositions()].flatMap(row =>
       [row.price ?? row.entryPrice, row.stopPrice, row.stopLoss, row.takeProfit]).filter(price => price > 0) : [];
     if (proposed && drag.target.kind !== 'draft') options.preview?.(drag.target, proposed.row);
-    renderStopReadout(proposed, viewport);
+    renderStopReadout(proposed, viewport, current, activeTarget);
     if (current.quote) for (const target of current.targets) {
       const active = drag?.target.key === target.key;
       const row = active && proposed ? proposed.row : target.row;
