@@ -1,30 +1,32 @@
+import { offsetAt, timeParts } from '@tradecanvas/commons';
+
 // Wire times are UTC milliseconds. Only form/display values use the chart zone.
-function parts(epoch, zone) {
+function chartZone(zone) {
   const match = /^(?:GMT|UTC)([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(zone || '');
-  const offset = match ? (match[1] === '-' ? -1 : 1) * (+match[2] * 60 + +(match[3] || 0)) * 60000 : 0;
-  const formatter = new Intl.DateTimeFormat('en-GB', { timeZone: match ? 'UTC' : zone === 'exchange' || !zone ? 'UTC' : zone,
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-  return Object.fromEntries(formatter.formatToParts(epoch + offset).map(p => [p.type, p.value]));
+  if (match) return (match[1] === '-' ? -1 : 1) * (+match[2] * 60 + +(match[3] || 0));
+  if (/^-?\d+$/.test(zone)) return Number(zone);
+  if (zone === 'local' || zone === null) return null;
+  return zone === 'exchange' || !zone ? 'UTC' : zone;
 }
+const pad = value => String(value).padStart(2, '0');
 export function wallTime(epoch, zone = 'UTC', clock = '24h') {
-  const p = parts(epoch, zone), hour = +p.hour;
-  return { date: `${p.year}-${p.month}-${p.day}`, time: `${String(clock === '12h' ? hour % 12 || 12 : hour).padStart(2, '0')}:${p.minute}`, period: hour >= 12 ? 'PM' : 'AM' };
+  const { year, month, day, hours, minutes } = timeParts(epoch, chartZone(zone));
+  return { date: `${year}-${pad(month)}-${pad(day)}`, time: `${pad(clock === '12h' ? hours % 12 || 12 : hours)}:${pad(minutes)}`, period: hours >= 12 ? 'PM' : 'AM' };
 }
 export function parseWallTime(date, text, period, zone = 'UTC', clock = '24h') {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}$/.test(text)) throw new Error('Nhập ngày và giờ dạng HH:mm.');
   let [hour, minute] = text.split(':').map(Number);
   if (minute > 59 || hour > (clock === '12h' ? 12 : 23) || (clock === '12h' && hour < 1)) throw new Error('Giờ không hợp lệ.');
   if (clock === '12h') hour = hour % 12 + (period === 'PM' ? 12 : 0);
-  const wanted = `${date} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  const guess = Date.parse(`${date}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00Z`);
+  const time = `${pad(hour)}:${pad(minute)}`;
+  const guess = Date.parse(`${date}T${time}:00Z`);
+  if (!Number.isFinite(guess)) throw new Error('Ngày hết hạn không hợp lệ.');
+  const timezone = chartZone(zone);
   // Candidate offsets include both sides of a DST transition. Nonexistent or
   // ambiguous local times require an unambiguous UTC/offset zone selection.
-  const offsets = new Set([-36, 0, 36].map(h => {
-    const at = guess + h * 3600000, p = parts(at, zone);
-    return Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`) - at;
-  }));
-  const candidates = [...offsets].map(offset => guess - offset).filter(at => {
-    const value = wallTime(at, zone); return `${value.date} ${value.time}` === wanted;
+  const offsets = new Set([-36, 0, 36].map(h => offsetAt(timezone, guess + h * 3600000)));
+  const candidates = [...offsets].map(offset => guess - offset * 60000).filter(at => {
+    const value = wallTime(at, zone); return value.date === date && value.time === time;
   });
   if (candidates.length !== 1) throw new Error('Giờ này trùng hoặc không tồn tại do DST. Chọn UTC/offset rõ ràng.');
   return candidates[0];

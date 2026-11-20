@@ -93,6 +93,8 @@ Start an isolated test server on 8773 with `bridge.py --host 127.0.0.1 --port 87
 
 ## Sources and notices
 
+The host uses upstream's chart grid, named layouts, drawing tools, execution adapter, Long/Short geometry and time-zone calculations. The MT5 integration supplies the terminal feed, broker order validation and lot sizing, timed exits, the Sessions and CVD plugins, and shared LAN storage.
+
 The application uses published `@tradecanvas/chart@2.16.0`. Its order UI is an independent implementation based on TradingView's public [Order Ticket documentation](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/order-ticket/) and [order-projection behavior](https://www.tradingview.com/support/solutions/43000736178-chart-trading-order-projection/). The [Lightweight Charts source](https://github.com/tradingview/lightweight-charts/tree/c29c51e1e5bc61981da5832c97797cb8283d120f) was inspected; it is a chart renderer and does not supply this ticket. No proprietary TradingView Trading Platform source is included.
 
 `cvd.js` and `cvd_volume.py` retain their MPL 2.0 notices and attribution to TradingView's CVD Candle script. `session-levels.js` retains the attribution to Texmoonbeam's Pine indicator supplied for the port. The indicator ports are JavaScript/Python implementations over MT5 data, not a Pine Script runtime. Broker tick-volume CVD is an estimate from quote direction, not exchange-provided bid/ask trade delta.

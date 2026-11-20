@@ -1,3 +1,5 @@
+import { positionLevels } from '@tradecanvas/core';
+
 export const ORDER_TYPES = [['market', 'Market'], ['limit', 'Limit'], ['stop', 'Stop'], ['stopLimit', 'Stop Limit']];
 
 const FX_CURRENCIES = new Set('AUD CAD CHF CNH CZK DKK EUR GBP HKD HUF JPY MXN NOK NZD PLN SEK SGD THB TRY USD ZAR'.split(' '));
@@ -25,14 +27,12 @@ export function roundPrice(value, quote) {
 
 export function drawingOrder(chart, id, quote) {
   const drawing = chart.getDrawings().find(item => item.id === id && item.type === 'riskReward');
-  if (!drawing || drawing.anchors.length < 2 || drawing.pane) throw new Error('Chọn hình Long/Short trên chart giá với đủ Entry và SL.');
+  if (!drawing || drawing.paneId !== undefined || drawing.anchors.length < 2) throw new Error('Chọn hình Long/Short trên chart giá với đủ Entry và SL.');
+  const levels = positionLevels(drawing);
+  if (!levels || levels.entry <= 0 || levels.stopLoss <= 0) throw new Error('Hình Long/Short cần Entry, SL khác nhau và mức rủi ro hợp lệ.');
   const options = chart.getDrawingOptions(id);
-  const entry = drawing.anchors[0].price, stop = drawing.anchors[1].price;
-  if (!(entry > 0) || !(stop > 0) || entry === stop) throw new Error('Entry và SL của hình vẽ phải khác nhau.');
-  const side = stop < entry ? 'buy' : 'sell';
-  const ratio = Number(options.rewardRatio ?? 2);
-  return { side, type: 'limit', price: roundPrice(entry, quote), stopLoss: roundPrice(stop, quote),
-    takeProfit: roundPrice(entry + (side === 'buy' ? 1 : -1) * Math.abs(entry - stop) * ratio, quote),
+  return { side: levels.side, type: 'limit', price: roundPrice(levels.entry, quote), stopLoss: roundPrice(levels.stopLoss, quote),
+    takeProfit: roundPrice(levels.takeProfit, quote),
     quantityMode: options.riskMode === 'amount' ? 'riskAmount' : 'riskPercent', quantity: Number(options.risk ?? 1), drawingId: id };
 }
 

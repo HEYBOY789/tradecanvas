@@ -4,12 +4,15 @@ const { test } = require('node:test');
 test('Long/Short geometry preserves entry, stop, target and risk mode without copying drawing units as MT5 lots', async () => {
   const { drawingOrder, orderIntent } = await import('./order-model.js');
   const q = { tickSize: .001, digits: 3 };
-  const chart = { getDrawings: () => [{ id: 'plan', type: 'riskReward', anchors: [{ time: 1, price: 3800 }, { time: 2, price: 3810 }] }],
-    getDrawingOptions: () => ({ rewardRatio: 2, risk: 1, riskMode: 'percent', accountSize: 10000 }) };
+  const options = { rewardRatio: 2, risk: 1, riskMode: 'percent', accountSize: 10000 };
+  const drawing = { id: 'plan', type: 'riskReward', anchors: [{ time: 1, price: 3800 }, { time: 2, price: 3810 }], options };
+  const chart = { getDrawings: () => [drawing], getDrawingOptions: () => options };
   const draft = drawingOrder(chart, 'plan', q);
   assert.deepEqual([draft.side, draft.price, draft.stopLoss, draft.takeProfit, draft.quantityMode, draft.quantity], ['sell', 3800, 3810, 3780, 'riskPercent', 1]);
   assert.equal(orderIntent(draft, { quantity: .1 }).quantity, .1, 'only the broker estimate determines lots');
   assert.throws(() => orderIntent(draft, null), /Chờ MT5/);
+  drawing.paneId = 'an-indicator';
+  assert.throws(() => drawingOrder(chart, 'plan', q), /chart giá/);
 });
 
 test('stop-limit keeps trigger and limit independent and unit conversion respects side and exit direction', async () => {

@@ -1,6 +1,6 @@
 // Port of the visual levels and cross conditions by © Texmoonbeam (Pine Script v5).
 import { priceToY, timeToX } from '@tradecanvas/core';
-import { indicatorSource, parseIndicatorSource } from '@tradecanvas/commons';
+import { indicatorSource, isValidTimeZone, parseIndicatorSource, zoneOffsetMinutes } from '@tradecanvas/commons';
 import { FIBONACCI_LEVELS, PERIODS, SESSIONS } from './session-settings.js';
 import { sessionSchedule } from './session-seasons.js';
 
@@ -27,16 +27,8 @@ export function sessionClock(zone) {
     const offset = (sign === '-' ? -1 : 1) * (+hour * 60 + +minute) * MINUTE;
     return time => utcParts(time + offset);
   }
-  const formatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  });
-  return time => {
-    const { year, month, day, hour, minute } = Object.fromEntries(
-      formatter.formatToParts(time).map(({ type, value }) => [type, +value]),
-    );
-    return { day: Date.UTC(year, month - 1, day) / DAY, minute: hour * 60 + minute };
-  };
+  if (!isValidTimeZone(zone)) throw new RangeError('Invalid session timezone');
+  return time => utcParts(time + zoneOffsetMinutes(zone, time) * MINUTE);
 }
 
 function minutes(time) {
