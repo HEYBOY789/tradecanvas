@@ -69,7 +69,7 @@ export function installOrderDisplay(widget, read) {
     selected = hovered = null; pressed = false; tooltip.hidden = true; chart.requestRender();
   }
 
-  // The pinned 2.13.1 renderer supplies line drawing and execution hit boxes.
+  // The TradeCanvas renderer supplies line drawing and execution hit boxes.
   // Wrap only this chart instance; restoring these functions needs no rebuild.
   manager.positionRenderer.tags = manager.orderRenderer.tags = () => [];
   manager.positionRenderer.renderLines = function(ctx, rows, currentPrice, viewport, effective, drag) {

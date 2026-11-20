@@ -11,7 +11,7 @@
     "test:ui": "node run-ui-regressions.cjs sessions-settings.test.cjs sessions-independent.test.cjs sessions-seasons-ui.test.cjs sessions-pane.test.cjs sessions-period-settings.test.cjs sessions-fibonacci-ui.test.cjs chart-grid.test.cjs crosshair.test.cjs layout-persistence.test.cjs layout-transfer.test.cjs grid-crosshair.test.cjs shared-layouts.test.cjs price-alert.test.cjs"
   },
   "dependencies": {
-    "@tradecanvas/chart": "2.13.1"
+    "@tradecanvas/chart": "2.16.0"
   },
   "devDependencies": {
     "playwright": "1.62.1"

@@ -40,7 +40,7 @@ test('native chart picker, independent MT5 timeframes and saved layouts', async 
       return JSON.parse(sessions.params.sessionSettings).zone;
     }), 'GMT+3');
 
-    const picker = page.getByRole('button', { name: /^Cách chia biểu đồ/ });
+    const picker = page.getByRole('button', { name: /^Layout biểu đồ/ });
     async function pick(layout) {
       await picker.click();
       await page.locator(`.tcw-grid-picker [data-layout="${layout}"]`).click();
