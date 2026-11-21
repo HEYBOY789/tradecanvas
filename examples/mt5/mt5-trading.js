@@ -432,7 +432,8 @@ export function createMt5Trading(getActiveWidget) {
     window.addEventListener('keydown', escapeBracketMode);
     resetBracketMode();
     bar.append(quickSell, lots, quickBuy, bracketButton);
-    widget.chartContainer.append(bar);
+    // The widget tracks the price header and reserves space for this stack.
+    widget.chartContainer.querySelector('.tcw-ind-legend').append(bar);
     const display = installOrderDisplay(widget, () => ({ accountId: state?.account.id, currency: state?.account.currency || '', quote: state?.quotes[widget.getSymbol()],
       orders: state?.orders.filter(row => row.symbol === widget.getSymbol()) || [],
       positions: state?.positions.filter(row => row.symbol === widget.getSymbol()) || [] }));
@@ -464,11 +465,6 @@ export function createMt5Trading(getActiveWidget) {
       try { sessionStorage.setItem(`mt5:quick-lots:${state?.account.id}:${symbol}`, lots.value); } catch { /* Keep the visible value. */ }
       if (ticket.read().widget === widget && ticket.read().draft) { ticket.change('quantityMode', 'lots'); ticket.change('quantity', Number(lots.value)); }
     });
-    function positionBar() {
-      const rect = chart.getPlotRect();
-      bar.style.left = `${rect.x + 7}px`;
-      bar.style.top = `${chart.getLegendBottom() + (chart.legendStack?.height || 0) + 5}px`;
-    }
     async function quickMarket(side) {
       const symbol = widget.getSymbol(), q = state?.quotes[symbol];
       if (!q) { if (!key) pair(); return; }
@@ -508,7 +504,6 @@ export function createMt5Trading(getActiveWidget) {
         }
         bar.dataset.oneClick = String(armed);
         preferences.publish();
-        positionBar();
         adapter.emit('orders', state?.orders.filter(row => row.symbol === adapter.symbol()) || []);
         adapter.emit('positions', state?.positions.filter(row => row.symbol === adapter.symbol()) || []);
         adapter.emit('connectionChange', adapter.getConnectionState());
@@ -561,10 +556,10 @@ export function createMt5Trading(getActiveWidget) {
       } catch (error) { report(error); }
     };
     const drawingRemove = event => { if (ticket.read().widget === widget && ticket.read().draft?.drawingId === event.payload.id) ticket.close(); };
-    chart.on('drawingUpdate', drawingUpdate); chart.on('drawingRemove', drawingRemove); chart.on('resize', positionBar);
+    chart.on('drawingUpdate', drawingUpdate); chart.on('drawingRemove', drawingRemove);
     return () => {
       if (ticket.read().widget === widget) ticket.close(true);
-      chart.off('executionError', onError); chart.off('drawingUpdate', drawingUpdate); chart.off('drawingRemove', drawingRemove); chart.off('resize', positionBar);
+      chart.off('executionError', onError); chart.off('drawingUpdate', drawingUpdate); chart.off('drawingRemove', drawingRemove);
       chart.off('drawingToolChange', resetBracketMode); chart.off('toolModeChange', resetBracketMode);
       window.removeEventListener('keydown', escapeBracketMode); bracketModes.delete(widget);
       widget.chartContainer.removeEventListener('mousedown', preserveToolPress, true);

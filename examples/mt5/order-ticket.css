@@ -85,8 +85,20 @@
 .order-ticket-submit > span { font-size: 12px; }
 #mt5-ticket .order-ticket-submit:disabled, .mt5-projection-send:disabled { cursor: not-allowed; opacity: .45; }
 #mt5-ticket .order-ticket-submit[aria-busy="true"], .mt5-projection-send[aria-busy="true"] { cursor: wait; }
-.mt5-quick-trade { position: absolute; z-index: 5; display: flex; align-items: stretch; pointer-events: auto; font: 11px Inter, 'Segoe UI', sans-serif; border-radius: 5px; overflow: hidden; background: var(--tcw-bg, #131722); border: 1px solid var(--tcw-border, #2a2e39); }
-.mt5-quick-trade > button { cursor: pointer; padding: 5px 8px; display: grid; gap: 3px; border: 0; background: transparent; font: inherit; min-width: 72px; }
+.mt5-quick-trade {
+  order: -1;
+  display: flex;
+  align-items: stretch;
+  max-width: 100%;
+  margin: 2px 0 3px;
+  pointer-events: auto;
+  font: 11px Inter, 'Segoe UI', sans-serif;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--tcw-bg, #131722);
+  border: 1px solid var(--tcw-border, #2a2e39);
+}
+.mt5-quick-trade > button { flex: none; cursor: pointer; padding: 5px 8px; display: grid; gap: 3px; border: 0; background: transparent; font: inherit; min-width: 72px; }
 .mt5-quick-trade > button[data-side="sell"] { color: #f23645; border-right: 1px solid #f2364540; }
 .mt5-quick-trade > button[data-side="buy"] { color: #2962ff; border-left: 1px solid #2962ff40; }
 .mt5-quick-trade > button:disabled { opacity: .4; }
@@ -147,6 +159,6 @@
 @media (max-width: 760px) {
   #workspace.has-order-ticket { grid-template-columns: minmax(0, 1fr); }
   #mt5-ticket { position: fixed; z-index: 80; top: 0; right: 0; bottom: 0; width: min(370px, 94vw); box-shadow: -8px 0 25px #0005; }
-  .mt5-quick-trade > button { min-width: 60px; }
+  .mt5-quick-trade > button { min-width: 60px; padding-inline: 4px; }
   .mt5-quick-trade label { font-size: 9px; }
 }

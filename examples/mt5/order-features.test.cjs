@@ -16,6 +16,50 @@ async function drag(page, locator, dy, dx = 0, beforeUp, button = 'left') {
   if (beforeUp) await beforeUp(); await page.mouse.up({ button });
 }
 
+test('quick trading sits below the symbol and above the indicators on every chart', async () => {
+  const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+  try {
+    const { page, fixture } = await tradingPage(browser);
+    async function check(count) {
+      await page.waitForFunction(count => {
+        const widgets = testGrid.getWidgets();
+        return widgets.length === count && widgets.every(widget => {
+          const host = widget.chartContainer;
+          return host.querySelector('.mt5-quick-trade strong') && host.querySelector('.tcw-ind-legend > .tcw-ind-legend-row');
+        });
+      }, count);
+      const positions = await page.evaluate(() => testGrid.getWidgets().map(widget => {
+        const host = widget.chartContainer, chart = widget.getChart(), bounds = host.getBoundingClientRect();
+        const bar = host.querySelector('.mt5-quick-trade').getBoundingClientRect();
+        const first = host.querySelector('.tcw-ind-legend > .tcw-ind-legend-row').getBoundingClientRect();
+        const plot = chart.getPlotRect();
+        return { top: bar.top, bottom: bar.bottom, right: bar.right, start: bounds.top + chart.getLegendBottom(),
+          indicatorTop: first.top, plotRight: bounds.left + plot.x + plot.width };
+      }));
+      for (const position of positions) {
+        assert.ok(position.top >= position.start - 1 && position.top <= position.start + 6,
+          `quick trading starts just below the symbol legend: ${JSON.stringify(position)}`);
+        assert.ok(position.bottom < position.indicatorTop, 'indicator rows begin below the quick controls');
+        assert.ok(position.right <= position.plotRight + 1, 'the full quick bar fits inside the price pane');
+      }
+    }
+    await check(1);
+    await page.evaluate(() => {
+      const chart = testGrid.getWidget(0).getChart();
+      for (const period of [14, 50, 100]) chart.addIndicator('ema', { period });
+    });
+    await page.locator('.tcw-ind-legend > .tcw-ind-legend-row').nth(3).waitFor();
+    await check(1);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await check(1);
+    await page.setViewportSize({ width: 1366, height: 920 });
+    await page.evaluate(() => testGrid.setLayout('1x2'));
+    await check(2);
+    assert.equal(fixture.checked.length, 0); assert.equal(fixture.executed.length, 0);
+    assert.deepEqual(fixture.errors, []);
+  } finally { await browser.close(); }
+});
+
 test('invalid pending placement is disabled locally and quick controls keep One-click in settings', async () => {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   try {
