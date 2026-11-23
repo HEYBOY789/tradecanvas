@@ -51,6 +51,10 @@ Pending orders use native broker expiration when supported; host tracking follow
 
 Under **Chart Settings → Symbol → Last price**, **Đường giá** controls the native Bid line and its optional Ask companion. There is one **Đường giá Ask** checkbox, shown only while the price line is enabled. **Màu Bid** and **Màu Ask** replace the direction-based Up/Down colors; both lines share the same dash and width. Bid keeps its chosen color when the market moves down, and no duplicate Bid overlay is drawn. Live quotes update each second; replay uses its historical last price and hides live Ask. The Ask choice, native line styles and 12/24-hour clock preference are saved per chart in named/imported/shared layouts, with cancellation restoring previous values. Legacy layouts' separate Bid flag is ignored. Loading a layout never creates a trade deadline or enables One-click.
 
+## Supertrend (Pine v4)
+
+Add **Supertrend (Pine v4)** from **Chỉ báo**. The MT5 port uses the supplied Pine script's trailing bands and reversal rules. The defaults are ATR 10, source HL2, multiplier 3 and Wilder ATR. The inputs let you select an OHLC price source, use SMA of true range, hide the Buy/Sell labels or turn off trend shading. The small reversal dots remain visible when text labels are off. The indicator's **⋯** menu can create Buy, Sell and Direction Change alerts evaluated at candle close.
+
 ## Seasonal session hours
 
 In **All-In-One Sessions → Phiên giao dịch**, **Châu Á, London and New York** have separate editable start/end pairs for **Mùa hè** and **Mùa đông**. All four times use **Múi giờ phiên**, including fixed UTC/GMT offsets. The indicator automatically chooses the appropriate pair for each historical bar. **Asia and London follow the London season calendar** (`Europe/London`), allowing the custom Asian range to close at the European open. New York follows `America/New_York`, including the weeks when UK and US seasons differ. There is no manual season dropdown or automatic-switch checkbox. All hours remain independently editable; changing London's hours does not overwrite Asia's hours. Each indicator instance saves its own pairs, including Sessions on CVD.

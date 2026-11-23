@@ -8,6 +8,7 @@ import { installLayoutTransfer } from './layout-transfer.js';
 import { createSessionLevels, sessionClock } from './session-levels.js';
 import { createSessionSettings } from './session-settings.js';
 import { createMt5Trading } from './mt5-trading.js';
+import { supertrendAlertItems, supertrendPine } from './supertrend-pine.js';
 
 const status = document.getElementById('status');
 const refreshInterval = 1000;
@@ -168,7 +169,7 @@ async function start() {
     cell.options = {
       get feed() { return connection().feed; },
       timeframe,
-      indicatorMenuItems: context => connection().sessions.menuItems(context),
+      indicatorMenuItems: context => [...connection().sessions.menuItems(context), ...supertrendAlertItems(cell.widget, context)],
       onSymbolChange: () => trading.symbolChanged(),
       drawingMenuItems: context => trading.drawingMenuItems(cell.widget, context),
       chartMenuItems: context => [...priceAlertMenuItems(cell.widget, context), ...trading.chartMenuItems(cell.widget, context)],
@@ -188,6 +189,7 @@ async function start() {
     intervalTyping: false,
     locale: 'vi',
     theme: 'dark',
+    plugins: [{ kind: 'indicator', plugin: supertrendPine }],
     trading: true,
     accountPanel: false,
     persistSettings: true,
