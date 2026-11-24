@@ -55,6 +55,14 @@ Under **Chart Settings → Symbol → Last price**, **Đường giá** controls 
 
 Add **Supertrend (Pine v4)** from **Chỉ báo**. The MT5 port uses the supplied Pine script's trailing bands and reversal rules. The defaults are ATR 10, source HL2, multiplier 3 and Wilder ATR. The inputs let you select an OHLC price source, use SMA of true range, hide the Buy/Sell labels or turn off trend shading. The small reversal dots remain visible when text labels are off. The indicator's **⋯** menu can create Buy, Sell and Direction Change alerts evaluated at candle close.
 
+## Volume Profile, Pivot Anchored by DGT
+
+Add the indicator from **Chỉ báo**. It shows completed profiles between consecutive confirmed pivots and a developing profile from the latest confirmed pivot. The defaults are 20 bars on each side of a pivot, 25 price rows and a 68% Value Area. Inputs control the left/right histogram, POC and its extension rule, VAH/VAL, background fills, pivot or range labels, and candle colors based on an 89-bar volume SMA. Hover a label for profile statistics.
+
+The chart supplies MT5 tick volume per candle. As in the supplied script, both range endpoints contribute to the price bounds, and the last candle's volume goes into the next range after a pivot is confirmed. Pivots wait for the last candle in the confirmation window to close. Switches in the indicator's **⋯** menu create TradeCanvas alerts for a POC, VAH or VAL crossing and high volume. Those use the chart's existing one-shot alerts evaluated at candle close.
+
+The JavaScript port preserves the attribution to [dgtrd's open-source Pine v6 study](https://www.tradingview.com/script/utCRHZeP-Volume-Profile-Pivot-Anchored-by-DGT/) under the [Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/).
+
 ## Seasonal session hours
 
 In **All-In-One Sessions → Phiên giao dịch**, **Châu Á, London and New York** have separate editable start/end pairs for **Mùa hè** and **Mùa đông**. All four times use **Múi giờ phiên**, including fixed UTC/GMT offsets. The indicator automatically chooses the appropriate pair for each historical bar. **Asia and London follow the London season calendar** (`Europe/London`), allowing the custom Asian range to close at the European open. New York follows `America/New_York`, including the weeks when UK and US seasons differ. There is no manual season dropdown or automatic-switch checkbox. All hours remain independently editable; changing London's hours does not overwrite Asia's hours. Each indicator instance saves its own pairs, including Sessions on CVD.

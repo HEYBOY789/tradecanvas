@@ -24,6 +24,9 @@
     #chart .tcw-grid-layout-btn::after { content: 'Chia biểu đồ'; }
     #chart .tcw-grid-layout-btn > svg:last-of-type { order: 1; }
     #chart [data-pane-axis-scale] { cursor: ns-resize !important; }
+    .mt5-pivot-profile-tooltip { position: absolute; z-index: 6; pointer-events: none; white-space: pre-line;
+      max-width: calc(100% - 4px); padding: 8px 10px; border-radius: 4px; font: 11px/1.5 Inter, 'Segoe UI', sans-serif;
+      background: var(--tcw-bg, #141c27); color: var(--tcw-text, #e6eaf0); border: 1px solid var(--tcw-border, #48586d); }
     #sessions-dialog { width: min(680px, calc(100vw - 28px)); max-height: min(760px, 90dvh);
       color: #e6eaf0; background: #141c27; border: 1px solid #48586d; border-radius: 10px; padding: 16px; }
     #sessions-dialog::backdrop { background: #070b13b5; }

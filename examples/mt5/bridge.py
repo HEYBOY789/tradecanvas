@@ -50,6 +50,8 @@ def browser_assets():
     )
     assets = {'/': ('text/html; charset=utf-8', index)}
     assets['/supertrend-pine.js'] = (MODULE, (ROOT / 'supertrend-pine.js').read_bytes())
+    for name in ('pivot-volume-profile.js', 'pivot-volume-profile-model.js'):
+        assets[f'/{name}'] = (MODULE, (ROOT / name).read_bytes())
     for name in ('app.js', 'session-levels.js', 'session-settings.js', 'session-seasons.js', 'cvd.js', 'pane-scale.js', 'pane-crosshair.js', 'layout-persistence.js', 'layout-transfer.js', 'mt5-trading.js', 'shared-layouts.js', 'order-model.js', 'order-projection.js', 'order-gestures.js', 'order-ticket.js', 'order-rules.js', 'order-time.js', 'chart-preferences.js', 'expiry-chart.js', 'order-display.js', 'order-label-layout.js', 'quote-lines.js'):
         assets[f'/{name}'] = (MODULE, (ROOT / name).read_bytes())
     assets['/order-ticket.css'] = ('text/css; charset=utf-8', (ROOT / 'order-ticket.css').read_bytes())

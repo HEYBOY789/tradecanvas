@@ -4,11 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test:unit": "node --test order-model.test.cjs order-rules.test.cjs order-time.test.cjs order-label-layout.test.cjs cvd-history.test.cjs sessions-seasons.test.cjs sessions-fibonacci.test.cjs sessions-fibonacci-drawing.test.cjs supertrend-pine.test.cjs",
+    "test:unit": "node --test order-model.test.cjs order-rules.test.cjs order-time.test.cjs order-label-layout.test.cjs cvd-history.test.cjs sessions-seasons.test.cjs sessions-fibonacci.test.cjs sessions-fibonacci-drawing.test.cjs supertrend-pine.test.cjs pivot-volume-profile.test.cjs",
     "test:trading": "node --test --test-concurrency=1 mt5-trading.test.cjs sell-limit.test.cjs order-pips.test.cjs order-panel.test.cjs order-regression.test.cjs order-features.test.cjs order-middle-drag.test.cjs order-display.test.cjs quote-settings.test.cjs order-visual.test.cjs",
     "test:layouts": "node --test --test-concurrency=1 shared-layouts.test.cjs layout-transfer.test.cjs layout-persistence.test.cjs grid-crosshair.test.cjs",
     "test:bridge": "python -m unittest -v test_mt5_trading.py test_trade_expiry.py test_layout_store.py",
-    "test:ui": "node run-ui-regressions.cjs sessions-settings.test.cjs sessions-independent.test.cjs sessions-seasons-ui.test.cjs sessions-pane.test.cjs sessions-period-settings.test.cjs sessions-fibonacci-ui.test.cjs chart-grid.test.cjs crosshair.test.cjs layout-persistence.test.cjs layout-transfer.test.cjs grid-crosshair.test.cjs shared-layouts.test.cjs price-alert.test.cjs supertrend-pine-ui.test.cjs"
+    "test:ui": "node run-ui-regressions.cjs sessions-settings.test.cjs sessions-independent.test.cjs sessions-seasons-ui.test.cjs sessions-pane.test.cjs sessions-period-settings.test.cjs sessions-fibonacci-ui.test.cjs chart-grid.test.cjs crosshair.test.cjs layout-persistence.test.cjs layout-transfer.test.cjs grid-crosshair.test.cjs shared-layouts.test.cjs price-alert.test.cjs supertrend-pine-ui.test.cjs pivot-volume-profile-ui.test.cjs"
   },
   "dependencies": {
     "@tradecanvas/chart": "2.16.0"
