@@ -29,10 +29,20 @@ test('the existing drawing gains profile settings and restores them after reload
       return route.fulfill({ json: { server: 'Fixture', bars } });
     });
     await page.addInitScript(() => {
-      window.profilePaint = {};
+      window.profilePaint = { bars: [], ratios: [] };
+      const fillRect = CanvasRenderingContext2D.prototype.fillRect;
+      CanvasRenderingContext2D.prototype.fillRect = function (x, y, width, height) {
+        if (window.inspectVolumeRows && ['#4f91df', '#e2706b', '#38b8c8', '#ef6461'].includes(this.fillStyle)) {
+          profilePaint.bars.push({ x, y: y + height / 2, width });
+        }
+        return fillRect.call(this, x, y, width, height);
+      };
       const fillText = CanvasRenderingContext2D.prototype.fillText;
       CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...args) {
         if (/^(POC|VAH|VAL) /.test(text)) profilePaint[text.slice(0, 3)] = { text, x, y, color: this.fillStyle };
+        if (window.inspectVolumeRows && /^\d{1,3}%$/.test(text)) {
+          profilePaint.ratios.push({ percent: parseInt(text, 10), x, y, width: this.measureText(text).width, color: this.fillStyle });
+        }
         return fillText.call(this, text, x, y, ...args);
       };
     });
@@ -90,8 +100,33 @@ test('the existing drawing gains profile settings and restores them after reload
     await field('Chia hàng theo').locator('select').selectOption('ticks');
     await rowSize.fill('500');
     await rowSize.press('Tab');
-    await field('Hiển thị volume').locator('select').selectOption('delta');
+    await field('Khung tính').locator('select').selectOption('chart');
+    await field('Hiển thị volume').locator('select').selectOption('split');
+    const width = field('Độ rộng histogram (%)').locator('input');
+    await width.fill('3');
+    await width.press('Tab');
+    const percentages = field('Hiện % Tăng/Giảm').getByRole('checkbox');
+    assert.equal(await percentages.isChecked(), false);
+    await page.evaluate(() => { window.inspectVolumeRows = true; });
+    await percentages.check();
+    const checkRatios = right => page.waitForFunction(rightSide => {
+      const { bars, ratios } = profilePaint;
+      return ratios.some((up, i) => {
+        if (!['#4f91df', '#38b8c8'].includes(up.color)) return false;
+        const down = ratios[i + 1];
+        if (!down || !['#e2706b', '#ef6461'].includes(down.color) || up.y !== down.y || up.percent + down.percent !== 100) return false;
+        const row = bars.filter(bar => Math.abs(bar.y - up.y) < 1);
+        if (!row.length) return false;
+        const left = Math.min(...row.map(bar => bar.x));
+        const right = Math.max(...row.map(bar => bar.x + bar.width));
+        return right - left < 20 && (rightSide ? down.x + down.width < left : up.x > right);
+      });
+    }, right);
+    await checkRatios(false);
+    await page.evaluate(() => { profilePaint.bars = []; profilePaint.ratios = []; });
     await field('Vị trí histogram').locator('select').selectOption('right');
+    await checkRatios(true);
+    await page.evaluate(() => { window.inspectVolumeRows = false; });
     const beforeExtension = await page.evaluate(() => profilePaint.POC.x);
     await field('Kéo dài sang phải theo nến mới').getByRole('checkbox').check();
     await field('Hiện POC theo từng nến').getByRole('checkbox').check();
@@ -106,11 +141,11 @@ test('the existing drawing gains profile settings and restores them after reload
     const restored = await page.evaluate(() => {
       const chart = testGrid.getWidget(0).getChart();
       const drawing = chart.getDrawings().find(d => d.id === 'old-profile');
-      const { rowMode, rowSize, volumeMode, profileSide, extendToLive, showDevelopingPoc, pocColor } = drawing.options;
-      return { id: testGrid.getLayoutSession().current()?.id, rowMode, rowSize, volumeMode, profileSide, extendToLive, showDevelopingPoc, pocColor };
+      const { rowMode, rowSize, volumeMode, profileSide, extendToLive, showDevelopingPoc, showPercentages, pocColor } = drawing.options;
+      return { id: testGrid.getLayoutSession().current()?.id, rowMode, rowSize, volumeMode, profileSide, extendToLive, showDevelopingPoc, showPercentages, pocColor };
     });
-    assert.deepEqual(restored, { id: saved.id, rowMode: 'ticks', rowSize: 500, volumeMode: 'delta', profileSide: 'right',
-      extendToLive: true, showDevelopingPoc: true, pocColor: '#a815d1' });
+    assert.deepEqual(restored, { id: saved.id, rowMode: 'ticks', rowSize: 500, volumeMode: 'split', profileSide: 'right',
+      extendToLive: true, showDevelopingPoc: true, showPercentages: true, pocColor: '#a815d1' });
     await page.evaluate(() => testGrid.getWidget(0).getChart().removeDrawing('old-profile'));
     assert.deepEqual(errors, []);
   } finally {

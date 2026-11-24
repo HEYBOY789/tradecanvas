@@ -18,6 +18,7 @@ const options = {
   extendToLive: toggle('Kéo dài sang phải theo nến mới', false),
   showProfile: toggle('Hiện histogram', true),
   showValues: toggle('Hiện số volume trên hàng', false),
+  showPercentages: toggle('Hiện % Tăng/Giảm', false),
   profileSide: choice('Vị trí histogram', 'left', [['left', 'Trái'], ['right', 'Phải']]),
   profileWidth: number('Độ rộng histogram (%)', 33, 1, 100),
   shadeBox: toggle('Tô nền vùng đã chọn', false),
@@ -173,7 +174,7 @@ class FixedRangeProfile extends DrawingBase {
       && point.y >= p.top - tolerance && point.y <= p.bottom + tolerance;
   }
 
-  renderHistogram(ctx, state, p) {
+  renderHistogram(ctx, state, p, plot) {
     const mode = this.option(state, 'volumeMode');
     const right = this.option(state, 'profileSide') === 'right';
     const width = (p.right - p.left) * this.option(state, 'profileWidth') / 100;
@@ -185,10 +186,12 @@ class FixedRangeProfile extends DrawingBase {
     const vaDownColor = this.colors(state, 'vaDownColor');
     const textColor = this.colors(state, 'valueColor');
     const values = this.option(state, 'showValues');
+    const percentages = mode === 'split' && this.option(state, 'showPercentages');
+    const outline = percentages ? this.chart.getTheme().background : null;
+    let lastLabelY = -Infinity;
     const opacity = this.option(state, 'profileOpacity') / 100;
     const vaOpacity = this.option(state, 'vaOpacity') / 100;
     ctx.font = '11px system-ui, sans-serif';
-    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let i = 0; i < p.count; i++) {
       const up = p.up[i], down = p.down[i];
@@ -217,9 +220,38 @@ class FixedRangeProfile extends DrawingBase {
         if (ctx.measureText(text).width + 4 <= size) {
           ctx.globalAlpha = 1;
           ctx.fillStyle = textColor;
+          ctx.textAlign = 'center';
           ctx.fillText(text, left + size / 2, top + rowHeight / 2);
         }
       }
+      if (!percentages) continue;
+      const y = top + rowHeight / 2;
+      if (y < plot.y + 6 || y > plot.y + plot.height - 6 || Math.abs(y - lastLabelY) < 12) continue;
+      // Use the rounded complement so both numbers always add up to 100%.
+      const rising = Math.round(up / p.total[i] * 100);
+      const labels = [
+        [rising + '%', inArea ? vaUpColor : upColor],
+        [' / ', textColor],
+        [(100 - rising) + '%', inArea ? vaDownColor : downColor],
+      ];
+      const widths = labels.map(([text]) => ctx.measureText(text).width);
+      const labelWidth = widths.reduce((sum, value) => sum + value, 0);
+      const outside = [left + size + 4, left - 4 - labelWidth];
+      if (right) outside.reverse();
+      let x = outside.find(at => at >= plot.x + 2 && at + labelWidth <= plot.x + plot.width - 2);
+      if (x === undefined) continue;
+      ctx.globalAlpha = 1;
+      ctx.textAlign = 'left';
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      for (const [index, [text, color]] of labels.entries()) {
+        ctx.fillStyle = color;
+        ctx.strokeText(text, x, y);
+        ctx.fillText(text, x, y);
+        x += widths[index];
+      }
+      lastLabelY = y;
     }
   }
 
@@ -269,7 +301,7 @@ class FixedRangeProfile extends DrawingBase {
       ctx.fillStyle = withAlpha(state.style.fillColor || state.style.color, state.style.fillOpacity ?? .12);
       ctx.fillRect(p.left, p.top, width, height);
     }
-    if (this.option(state, 'showProfile')) this.renderHistogram(ctx, state, p);
+    if (this.option(state, 'showProfile')) this.renderHistogram(ctx, state, p, viewport.chartRect);
     this.applyGuideStyle(ctx, state.style.color);
     this.strokeCrispRect(ctx, p.left, p.top, width, height);
     ctx.globalAlpha = 1;
