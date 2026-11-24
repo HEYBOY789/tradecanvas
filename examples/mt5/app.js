@@ -10,6 +10,7 @@ import { createSessionSettings } from './session-settings.js';
 import { createMt5Trading } from './mt5-trading.js';
 import { supertrendAlertItems, supertrendPine } from './supertrend-pine.js';
 import { installPivotVolumeProfile, pivotVolumeAlertItems } from './pivot-volume-profile.js';
+import { installFixedRangeColorFields, installFixedRangeProfile } from './fixed-range-profile.js';
 
 const status = document.getElementById('status');
 const refreshInterval = 1000;
@@ -215,6 +216,7 @@ async function start() {
       const { cvd, close, sessions } = cell.connect();
       const closeTrading = trading.attach(widget, () => grid?.setActive(index), index);
       const closePivotProfile = installPivotVolumeProfile(widget);
+      const closeFixedProfile = installFixedRangeProfile(widget, config, getJSON);
       cell.message = '';
       sessions.attach(widget);
       cvd.attach(widget);
@@ -228,6 +230,7 @@ async function start() {
         close();
         closeTrading();
         closePivotProfile();
+        closeFixedProfile();
         destroy();
         cell.connection = undefined;
         cell.widget = undefined;
@@ -240,4 +243,5 @@ async function start() {
   installLayoutTransfer(grid, document.getElementById('chart'), layoutStorage, { ...config, maxCharts: frames.length }, layoutOperations);
 }
 
+installFixedRangeColorFields();
 start().catch(error => showStatus(`Không thể mở biểu đồ: ${error.message}`));

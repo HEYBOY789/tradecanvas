@@ -37,6 +37,11 @@ PAGE_SIZE = min(600, BAR_COUNT)
 LIBRARIES = ('chart', 'core', 'commons')
 MODULE = 'text/javascript; charset=utf-8'
 DAY_MS = 86_400_000
+PROFILE_LIMIT = 5000
+PROFILE_STEPS = {frame: minutes * 60_000 for frame, minutes in (
+    ('1m', 1), ('3m', 3), ('5m', 5), ('15m', 15), ('30m', 30),
+    ('1h', 60), ('4h', 240), ('1d', 1440),
+)}
 
 
 def browser_assets():
@@ -50,7 +55,8 @@ def browser_assets():
     )
     assets = {'/': ('text/html; charset=utf-8', index)}
     assets['/supertrend-pine.js'] = (MODULE, (ROOT / 'supertrend-pine.js').read_bytes())
-    for name in ('pivot-volume-profile.js', 'pivot-volume-profile-model.js'):
+    for name in ('pivot-volume-profile.js', 'pivot-volume-profile-model.js',
+                 'fixed-range-profile.js', 'fixed-range-profile-model.js'):
         assets[f'/{name}'] = (MODULE, (ROOT / name).read_bytes())
     for name in ('app.js', 'session-levels.js', 'session-settings.js', 'session-seasons.js', 'cvd.js', 'pane-scale.js', 'pane-crosshair.js', 'layout-persistence.js', 'layout-transfer.js', 'mt5-trading.js', 'shared-layouts.js', 'order-model.js', 'order-projection.js', 'order-gestures.js', 'order-ticket.js', 'order-rules.js', 'order-time.js', 'chart-preferences.js', 'expiry-chart.js', 'order-display.js', 'order-label-layout.js', 'quote-lines.js'):
         assets[f'/{name}'] = (MODULE, (ROOT / name).read_bytes())
@@ -222,6 +228,19 @@ class MarketData:
             result['cvd'] = delta
         return result
 
+    def profile_bars(self, symbol, frame, start, end):
+        step = PROFILE_STEPS.get(frame)
+        if not step or not 0 <= start < end <= 253402300799000 or end - start > step * PROFILE_LIMIT:
+            raise ValueError('Vùng dữ liệu Volume Profile không hợp lệ.')
+        with self.lock:
+            self.require_terminal()
+            info = mt5.symbol_info(symbol)
+            if info is None or not info.visible:
+                raise ValueError('Mã không có trong Market Watch.')
+            # The start is inclusive. MT5 also includes the end, unlike our range.
+            bars = mt5.copy_rates_range(symbol, FRAMES[frame], (start + 999) // 1000, (end - 1) // 1000)
+            return dict(server=broker_name(), bars=candle_rows(bars))
+
 
 class ChartHandler(BaseHTTPRequestHandler):
     def valid_host(self):
@@ -275,10 +294,15 @@ class ChartHandler(BaseHTTPRequestHandler):
         if request.path in self.server.assets:
             content_type, body = self.server.assets[request.path]
             self.send_body(HTTPStatus.OK, content_type, body)
-        elif request.path in ('/api/config', '/api/bars'):
+        elif request.path in ('/api/config', '/api/bars', '/api/profile-bars'):
             try:
                 if request.path == '/api/config':
                     data = self.server.feed.config()
+                elif request.path == '/api/profile-bars':
+                    query = parse_qs(request.query)
+                    data = self.server.feed.profile_bars(
+                        query.get('symbol', [''])[0], query.get('frame', [''])[0],
+                        int(query.get('from', ['0'])[0]), int(query.get('to', ['0'])[0]))
                 else:
                     query = parse_qs(request.query)
                     symbol = query.get('symbol', [''])[0]
