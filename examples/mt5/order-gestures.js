@@ -1,5 +1,5 @@
 import { priceToY, yToPrice } from '@tradecanvas/core';
-import { bracketSide, roundPrice } from './order-model.js';
+import { bracketSide, estimateExit, roundPrice } from './order-model.js';
 import { closingQuote, projectOrder, tradeIssue } from './order-rules.js';
 
 const moneyFormat = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero' });
@@ -98,14 +98,11 @@ export function tradeGestures(widget, options) {
       return;
     }
     const live = activeTarget?.kind !== 'draft' ? activeTarget?.row : null;
-    const entry = live?.entryPrice ?? row.entryPrice ?? row.price;
     const sizedByBroker = row.quantityMode && row.quantityMode !== 'lots';
     const quantity = sizedByBroker ? current.estimate?.quantity : live?.quantity ?? row.quantity;
-    const move = (price - entry) * (row.side === 'buy' ? 1 : -1);
-    const rate = current.quote.exitProfitRates?.[row.side]?.[move < 0 ? 'loss' : 'profit'];
     const estimated = field === 'stopLoss' ? current.estimate?.risk : current.estimate?.reward;
     const profit = Number.isFinite(estimated) ? (field === 'stopLoss' ? -estimated : estimated)
-      : quantity > 0 ? move * quantity * rate : NaN;
+      : quantity > 0 ? estimateExit(row, price, current.quote, quantity).profit : undefined;
     const amount = Number.isFinite(profit) && current.currency ? `≈ ${moneyFormat.format(profit)} ${current.currency}`
       : sizedByBroker && current.submitStatus.waiting ? 'Đang tính lãi/lỗ…' : 'Chưa tính được lãi/lỗ';
     const text = `${names[field]} ${chart.formatPrice(price)} · ${amount}`;

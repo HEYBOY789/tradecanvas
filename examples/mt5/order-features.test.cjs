@@ -115,9 +115,15 @@ test('expiry applies to filled positions and drafts, uses chart timezone and can
     const { page, fixture } = await tradingPage(browser);
     await page.evaluate(() => testGrid.getWidget(0).setSettings({ timezone: 'Asia/Ho_Chi_Minh' }));
     await viewport(page);
-    await page.getByRole('button', { name: 'Vị thế MT5', exact: true }).click();
-    const accountPanel = page.locator('#mt5-account');
-    await accountPanel.locator('tr').filter({ hasText: '123 · XAUUSDm' }).getByRole('button', { name: 'Thời hạn', exact: true }).click();
+    const entry = await page.evaluate(async () => {
+      const { priceToY } = await import('/vendor/core/index.js');
+      const owner = testGrid.getWidget(0), view = owner.getChart().viewport.getState();
+      const bounds = owner.chartContainer.getBoundingClientRect();
+      const x = view.chartRect.x + view.chartRect.width / 2, y = priceToY(3800, view);
+      return { x: bounds.left + x, y: bounds.top + y };
+    });
+    await page.mouse.click(entry.x, entry.y, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Đặt thời hạn vị thế #123…', exact: true }).click({ timeout: 2000 });
     const editor = page.getByRole('dialog', { name: 'Thời hạn #123', exact: true }); await editor.waitFor();
     await editor.getByLabel('Định dạng giờ', { exact: true }).selectOption('12h');
     await editor.getByLabel('Ngày hết hạn', { exact: true }).fill('2027-01-05');
@@ -125,10 +131,11 @@ test('expiry applies to filled positions and drafts, uses chart timezone and can
     await editor.getByRole('button', { name: 'Lưu thời hạn', exact: true }).click();
     const review = page.locator('#mt5-review'); await review.waitFor();
     assert.match(await review.textContent(), /Asia\/Ho_Chi_Minh/);
+    assert.match(await review.textContent(), /Ticket 123/);
     await review.getByRole('button', { name: 'Gửi tới MT5', exact: true }).click();
     await review.waitFor({ state: 'detached' }); await editor.waitFor({ state: 'detached' });
-    await accountPanel.getByRole('button', { name: 'Đóng', exact: true }).click();
     assert.equal(fixture.executed.at(-1).action, 'setExpiry');
+    assert.equal(fixture.executed.at(-1).intent.kind, 'position');
     assert.equal(fixture.executed.at(-1).intent.expiresAt, Date.UTC(2027, 0, 5, 16, 30));
     await page.getByRole('button', { name: 'Đặt lệnh MT5', exact: true }).click();
     const ticket = page.locator('#mt5-ticket:not([hidden])');
@@ -149,6 +156,13 @@ test('expiry applies to filled positions and drafts, uses chart timezone and can
     const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/trading/execute');
     await drag(page, line, 0, -70); await response;
     assert.notEqual(fixture.executed.at(-1).intent.expiresAt, Date.UTC(2027, 0, 5, 16, 30));
+    await page.getByRole('button', { name: 'Vị thế MT5', exact: true }).click();
+    const accountPanel = page.locator('#mt5-account');
+    await accountPanel.locator('tr').filter({ hasText: '123 · XAUUSDm' }).getByRole('button', { name: 'Thời hạn', exact: true }).click();
+    await editor.getByRole('button', { name: 'Bỏ thời hạn', exact: true }).click();
+    await editor.waitFor({ state: 'detached' });
+    assert.deepEqual(fixture.executed.at(-1).intent, { kind: 'position', ticket: '123', expiresAt: null });
+    assert.equal(fixture.positions.length, 1, 'changing the deadline leaves the live position alone until expiry');
     assert.deepEqual(fixture.errors, []);
   } finally { await browser.close(); }
 });

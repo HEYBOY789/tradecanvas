@@ -283,7 +283,7 @@ export function createMt5Trading(getActiveWidget) {
       clock: value => { if (value) owner?.setTradePreferences({ clock: value }); return owner?.getTradePreferences?.().clock || '24h'; },
       change(value) { at = value; } });
     fields.render(at);
-    const save = value => review('setExpiry', { kind, ticket: row.id, expiresAt: value }, row.symbol, accountId)
+    const save = value => review('setExpiry', { kind, ticket: row.id, expiresAt: value }, row.symbol, accountId, undefined, owner)
       .then(result => { if (result) modal.close(); }).catch(error => { status.textContent = error.message; });
     modal.append(fields.root, element('p', 'Host sẽ hủy lệnh chờ hoặc đóng vị thế khi tới hạn. Host và MT5 phải chạy; nếu mất kết nối thì xử lý khi kết nối lại.'),
       button('Lưu thời hạn', () => { try { at = fields.read(); void save(at); } catch (error) { status.textContent = error.message; } }),
@@ -333,7 +333,7 @@ export function createMt5Trading(getActiveWidget) {
     modal.append(element('p', `Pip của giá đặt tính từ ${base} ${priceText(quotePrice, quote)} lúc mở phiếu. SL/TP tính từ Entry mới.`), form, status); modal.showModal();
   }
 
-  async function review(action, intent, symbol, accountId = state?.account.id, fallbackQuote) {
+  async function review(action, intent, symbol, accountId = state?.account.id, fallbackQuote, owner = getActiveWidget()) {
     if (busy || reviewOpen) throw new Error('Hãy hoàn tất hoặc hủy yêu cầu đang mở.');
     const quote = state?.quotes[symbol] ?? fallbackQuote;
     if (action === 'place') { const issue = tradeIssue(intent, state?.quotes[symbol]); if (issue) throw new Error(issue); }
@@ -371,8 +371,9 @@ export function createMt5Trading(getActiveWidget) {
     const names = { place: 'Đặt lệnh', modifyOrder: 'Sửa giá lệnh chờ', cancel: 'Hủy lệnh chờ', modifyPosition: 'Sửa SL/TP', close: 'Đóng vị thế', setExpiry: 'Hẹn đóng / hủy lệnh' };
     const description = [`${a.demo ? 'DEMO' : 'TÀI KHOẢN THẬT'} · ${a.login} · ${a.server}`, `${names[action]} · ${symbol}`];
     if (intent.side) description.push(`${intent.side.toUpperCase()} ${intent.type.toUpperCase()} · ${intent.quantity} lot`);
-    if (intent.positionId || intent.orderId) description.push(`Ticket ${intent.positionId || intent.orderId}`);
-    if ('expiresAt' in intent) description.push(`Thời hạn: ${timeLabel(intent.expiresAt, getActiveWidget()?.getSettings().timezone, getActiveWidget()?.getTradePreferences?.().clock)}`);
+    const ticketId = intent.positionId || intent.orderId || intent.ticket;
+    if (ticketId) description.push(`Ticket ${ticketId}`);
+    if ('expiresAt' in intent) description.push(`Thời hạn: ${timeLabel(intent.expiresAt, owner?.getSettings().timezone, owner?.getTradePreferences?.().clock)}`);
     if (action === 'close') description.push(`Đóng ${intent.quantity} lot`);
     if (intent.type && intent.type !== 'market') description.push(`Giá ${intent.price}`);
     if (intent.type === 'stopLimit') description.push(`Giá kích hoạt Stop ${intent.stopPrice} → Limit ${intent.price}`);
@@ -458,7 +459,7 @@ export function createMt5Trading(getActiveWidget) {
       ...(ticket.read().widget === widget && ticket.read().draft?.expiresAt ? [{ ...ticket.read().draft, kind: 'draft', id: 'draft' }] : []),
     ] }), (row, at, accountId) => {
       if (row.kind === 'draft') { ticket.change('expiresAt', at); return; }
-      return review('setExpiry', { kind: row.kind, ticket: row.id, expiresAt: at }, row.symbol, accountId).catch(report);
+      return review('setExpiry', { kind: row.kind, ticket: row.id, expiresAt: at }, row.symbol, accountId, undefined, widget).catch(report);
     }, () => busy || reviewOpen);
     lots.addEventListener('input', () => {
       const symbol = widget.getSymbol(); quickLots.set(symbol, Number(lots.value));
@@ -568,6 +569,21 @@ export function createMt5Trading(getActiveWidget) {
     };
   }
 
+  function positionExpiryItems(owner) {
+    const target = owner?.orderDisplay?.contextTrade();
+    if (target?.kind !== 'position' || !connected) return [];
+    const accountId = state.account.id, symbol = owner.getSymbol();
+    const find = () => state?.positions.find(row => row.id === target.id && row.symbol === symbol);
+    const row = find();
+    if (!row) return [];
+    const action = row.expiresAt ? 'Sửa' : 'Đặt';
+    return [{ label: `${action} thời hạn vị thế #${row.id}…`, onSelect: () => {
+      const current = find();
+      if (connected && state.account.id === accountId && current) editExpiry(current, 'position', owner);
+      else report(new Error('Vị thế hoặc tài khoản MT5 đã thay đổi.'));
+    } }];
+  }
+
   function chartMenuItems(owner, context) {
     if (!owner || context.price == null || !['price', 'priceAxis', 'priceAxisAdd', 'plot'].includes(context.area)) return [];
     const symbol = owner.getSymbol(), q = state?.quotes[symbol];
@@ -584,12 +600,13 @@ export function createMt5Trading(getActiveWidget) {
     for (const order of state.orders.filter(row => row.symbol === symbol).slice(0, 6)) entries.push({
       label: `Sửa giá / SL / TP lệnh ${order.id}…`, onSelect: () => editOrder(order).catch(report),
     });
-    return entries;
+    return [...positionExpiryItems(owner), ...entries];
   }
 
   function drawingMenuItems(owner, context) {
-    if (!owner || context.type !== 'riskReward' || context.selected.length !== 1) return [];
-    return [{ label: 'Tạo lệnh giới hạn MT5 từ vị thế…', icon: 'receipt', onSelect: async () => {
+    const entries = positionExpiryItems(owner);
+    if (!owner || context.type !== 'riskReward' || context.selected.length !== 1) return entries;
+    return [...entries, { label: 'Tạo lệnh giới hạn MT5 từ vị thế…', icon: 'receipt', onSelect: async () => {
       try {
         if (!key) { pair(); return; }
         await refresh();

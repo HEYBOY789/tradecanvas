@@ -20,6 +20,18 @@ export function pipSize(symbol) {
   if (base !== currency && FX_CURRENCIES.has(base) && FX_CURRENCIES.has(currency)) return currency === 'JPY' ? .01 : .0001;
 }
 
+export function estimateExit(row, price, quote, quantity = row.quantity) {
+  const entry = row.entryPrice ?? row.price;
+  if (!(entry > 0 && price > 0)) return {};
+  const move = (price - entry) * (row.side === 'buy' ? 1 : -1);
+  const pip = pipSize(row.symbol);
+  const rate = quote?.exitProfitRates?.[row.side]?.[move < 0 ? 'loss' : 'profit'];
+  return {
+    pips: pip > 0 ? move / pip : undefined,
+    profit: quantity > 0 && rate > 0 ? move * quantity * rate : undefined,
+  };
+}
+
 export function roundPrice(value, quote) {
   const step = quote?.tickSize || 0.001;
   return Number((Math.round(value / step) * step).toFixed(quote?.digits ?? 8));

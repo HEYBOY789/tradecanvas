@@ -1,9 +1,12 @@
 import { priceToY } from '@tradecanvas/core';
 import { tradeLabel, layoutTradeLabels } from './order-label-layout.js';
+import { estimateExit } from './order-model.js';
 import { timeLabel } from './order-time.js';
 
 const DIM = .24, BUTTON = 20;
 const fields = ['price', 'stopLoss', 'takeProfit'];
+const pipFormat = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2, signDisplay: 'exceptZero' });
+const moneyFormat = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'exceptZero' });
 
 // This adapter owns the MT5 label layout, focus and hit geometry together.
 // Native prices, execution events and price-axis badges stay with TradeCanvas.
@@ -13,6 +16,7 @@ export function installOrderDisplay(widget, read) {
     positionTags: manager.positionRenderer.tags, orderTags: manager.orderRenderer.tags };
   const tooltip = document.createElement('div'); tooltip.className = 'mt5-order-tooltip'; tooltip.setAttribute('role', 'tooltip'); tooltip.hidden = true; host.append(tooltip);
   let boxes = [], hovered = null, selected = null, pressed = false, lastAccount, lastSymbol, config, tooltipPoint, tooltipKey;
+  let contextEvent;
   const focused = () => hovered || selected;
   const tools = () => chart.getDrawingTool() || chart.isEraserMode() || chart.isZoomAreaMode();
   const reserved = event => event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || tools();
@@ -34,13 +38,23 @@ export function installOrderDisplay(widget, read) {
   function showTooltip(box, point) {
     if (!box || pressed || tools()) { tooltip.hidden = true; return; }
     tooltipPoint = point; tooltipKey = box.key;
-    const row = box.row, digits = read().quote?.digits ?? config?.pricePrecision ?? 3;
+    const row = box.row, { quote, currency } = read(), digits = quote?.digits ?? config?.pricePrecision ?? 3;
     const price = value => value > 0 ? Number(value).toFixed(digits) : '—';
     const type = box.kind === 'order' ? ` ${row.type === 'stopLimit' ? 'STOP LIMIT' : row.type.toUpperCase()}` : '';
+    const isExit = box.field === 'stopLoss' || box.field === 'takeProfit';
+    let outcome;
+    if (isExit) {
+      const { pips, profit } = estimateExit(row, box.price, quote);
+      const label = box.field === 'stopLoss' ? 'SL' : 'TP';
+      outcome = [`Tại ${label} ${price(box.price)}`, Number.isFinite(pips) ? `${pipFormat.format(pips)} pip` : '',
+        currency && Number.isFinite(profit) ? `≈ ${moneyFormat.format(profit)} ${currency}` : 'Chưa tính được lãi/lỗ'].filter(Boolean).join(' · ');
+    } else if (Number.isFinite(row.profit)) {
+      outcome = `P/L ${row.profit >= 0 ? '+' : ''}${row.profit.toFixed(2)} ${currency}`;
+    }
     const text = [`#${row.id} · ${row.symbol || widget.getSymbol()} · ${row.side.toUpperCase()}${type} · ${row.quantity} lot`,
       `Entry ${price(row.price ?? row.entryPrice)} · SL ${price(row.stopLoss)} · TP ${price(row.takeProfit)}`,
       ...(row.stopPrice ? [`Stop ${price(row.stopPrice)}`] : []),
-      ...(Number.isFinite(row.profit) ? [`P/L ${row.profit >= 0 ? '+' : ''}${row.profit.toFixed(2)} ${read().currency}`] : []),
+      ...(outcome ? [outcome] : []),
       timeLabel(row.expiresAt, widget.getSettings().timezone, widget.getTradePreferences?.().clock),
       ...(box.kind === 'position' && box.field === 'price' ? ['Kéo Entry để đặt SL/TP'] : [])].join('\n');
     if (tooltip.textContent !== text) tooltip.textContent = text;
@@ -63,6 +77,29 @@ export function installOrderDisplay(widget, read) {
     selected = box?.owner || null; hovered = selected; pressed = Boolean(box); tooltip.hidden = true; chart.requestRender();
   }
   function up() { pressed = false; }
+  // The widget builds its menu synchronously and only passes the rounded
+  // price. Keep the actual pointer for labels displaced away from their line.
+  function rememberContext(event) { if (host.contains(event.target)) contextEvent = event; }
+  function contextTrade() {
+    if (!contextEvent?.eventPhase || reserved(contextEvent)) return null;
+    const point = local(contextEvent);
+    const box = hit(point) || lineHit(point);
+    if (box) return box;
+    // A chart press can clear the painted tags until the next frame.
+    const viewport = chart.viewport.getState();
+    if (!contains(viewport.chartRect, point)) return null;
+    let closest = 6, target = null;
+    for (const row of chart.getPositions()) {
+      for (const price of [row.entryPrice, row.stopLoss, row.takeProfit]) {
+        if (!(price > 0)) continue;
+        const distance = Math.abs(priceToY(price, viewport) - point.y);
+        if (distance >= closest) continue;
+        closest = distance;
+        target = { kind: 'position', id: row.id };
+      }
+    }
+    return target;
+  }
   function leave() { if (!pressed) { updateFocus(null); tooltip.hidden = true; } }
   function clear(event) {
     if (event?.type === 'keydown' && event.key !== 'Escape') return;
@@ -188,13 +225,15 @@ export function installOrderDisplay(widget, read) {
   window.addEventListener('pointermove', move, true); window.addEventListener('pointerdown', down, true);
   window.addEventListener('pointerup', up, true); window.addEventListener('pointercancel', clear, true); window.addEventListener('keydown', clear, true);
   host.addEventListener('pointerleave', leave); chart.on('drawingToolChange', clear); chart.on('toolModeChange', clear);
-  const api = { hit: point => hit(point) || lineHit(point), destroy() {
+  window.addEventListener('contextmenu', rememberContext, true);
+  const api = { hit: point => hit(point) || lineHit(point), contextTrade, destroy() {
     manager.render = original.render; manager.positionRenderer.renderLines = original.positions; manager.orderRenderer.renderLines = original.orders;
     manager.positionRenderer.tags = original.positionTags; manager.orderRenderer.tags = original.orderTags;
     chart.plugins.unregister('overlay:mt5-order-labels');
     window.removeEventListener('pointermove', move, true); window.removeEventListener('pointerdown', down, true);
     window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', clear, true); window.removeEventListener('keydown', clear, true);
     host.removeEventListener('pointerleave', leave); chart.off('drawingToolChange', clear); chart.off('toolModeChange', clear);
+    window.removeEventListener('contextmenu', rememberContext, true);
     tooltip.remove(); delete widget.orderDisplay; chart.requestRender();
   } };
   widget.orderDisplay = api; chart.requestRender(); return api;

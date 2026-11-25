@@ -1,6 +1,15 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
+test('exit estimates use the position direction, remaining lot size and broker rates', async () => {
+  const { estimateExit } = await import('./order-model.js');
+  const sell = { side: 'sell', symbol: 'XAUUSDm', entryPrice: 3800, quantity: .02 };
+  const quote = { exitProfitRates: { sell: { profit: 100, loss: 120 } } };
+  assert.deepEqual(estimateExit(sell, 3780, quote), { pips: 2000, profit: 40 });
+  assert.deepEqual(estimateExit(sell, 3810, quote), { pips: -1000, profit: -24 });
+  assert.deepEqual(estimateExit(sell, 3810, {}), { pips: -1000, profit: undefined });
+});
+
 test('Long/Short geometry preserves entry, stop, target and risk mode without copying drawing units as MT5 lots', async () => {
   const { drawingOrder, orderIntent } = await import('./order-model.js');
   const q = { tickSize: .001, digits: 3 };

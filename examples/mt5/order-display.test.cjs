@@ -46,6 +46,16 @@ test('hover and selection focus the complete trade, reveal ticket/time, and do n
     assert.match(tip, /2027-01-05/); assert.match(tip, /Entry/); assert.match(tip, /3820/);
     fixture.positions[2].profit = 21.4;
     await page.waitForFunction(() => document.querySelector('.mt5-order-tooltip').textContent.includes('+21.40 USD'));
+    for (const [field, pips, cash] of [['stopLoss', '-1.000 pip', '-20,00 USD'], ['takeProfit', '+2.000 pip', '+40,00 USD']]) {
+      const stop = (await labels(page)).find(row => row.key === `position:125:${field}`);
+      const stopPoint = await point(page, stop);
+      await page.mouse.move(stopPoint.x, stopPoint.y);
+      const details = await page.getByRole('tooltip').filter({ hasText: '#125' }).textContent();
+      assert.ok(details.includes(pips), details);
+      assert.ok(details.includes(cash), details);
+      assert.ok(!details.includes('+21.40 USD'), details);
+    }
+    await page.mouse.move(at.x, at.y);
     list = await labels(page);
     assert.ok(list.filter(row => row.owner === 'position:125').every(row => row.opacity === 1));
     assert.ok(list.filter(row => row.owner !== 'position:125').every(row => row.opacity < .5));
