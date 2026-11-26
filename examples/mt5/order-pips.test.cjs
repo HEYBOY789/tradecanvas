@@ -60,10 +60,23 @@ test('place and modify MT5 orders in pips with an absolute price preview', async
     await checked({ orderId: '321', newPrice: 3798.01, previousPrice: 3750, stopLoss: 3797.66, takeProfit: 3798.76 });
     await pending.getByRole('button', { name: 'Đóng', exact: true }).click();
 
-    await account.getByRole('button', { name: 'Sửa SL/TP', exact: true }).click();
-    const filled = page.getByRole('dialog', { name: /^SL\/TP · / });
+    await account.getByRole('button', { name: 'Đóng', exact: true }).click();
+    const stop = await page.evaluate(async () => {
+      const { priceToY } = await import('/vendor/core/index.js');
+      const widget = testGrid.getWidget(0), chart = widget.getChart();
+      chart.setAutoScale(false); chart.viewport.setPriceRange(3700, 3860); chart.requestRender();
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const view = chart.viewport.getState(), bounds = widget.chartContainer.getBoundingClientRect();
+      return { x: bounds.left + view.chartRect.x + view.chartRect.width / 2, y: bounds.top + priceToY(3790, view) };
+    });
+    await page.mouse.click(stop.x, stop.y, { button: 'right' });
+    const editStops = page.getByRole('menuitem', { name: 'Sửa SL/TP vị thế #123…', exact: true });
+    await editStops.waitFor({ timeout: 2000 });
+    assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['Sửa SL/TP vị thế #123…', 'Đặt thời hạn vị thế #123…']);
+    await editStops.click();
+    const filled = page.getByRole('dialog', { name: 'SL/TP · XAUUSDm · 123', exact: true });
     await setPips(filled, 'stopLoss', 75.5);
-    await setPips(filled, 'takeProfit', 125);
+    await filled.locator('[name=takeProfit]').fill('3801.25');
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await filled.locator('.mt5-edit-price small').first().textContent(), 'Giá 3.799,245');
     assert.ok(await filled.evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1), 'pip controls fit a mobile dialog');

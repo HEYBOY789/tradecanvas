@@ -16,7 +16,6 @@ export function installOrderDisplay(widget, read) {
     positionTags: manager.positionRenderer.tags, orderTags: manager.orderRenderer.tags };
   const tooltip = document.createElement('div'); tooltip.className = 'mt5-order-tooltip'; tooltip.setAttribute('role', 'tooltip'); tooltip.hidden = true; host.append(tooltip);
   let boxes = [], hovered = null, selected = null, pressed = false, lastAccount, lastSymbol, config, tooltipPoint, tooltipKey;
-  let contextEvent;
   const focused = () => hovered || selected;
   const tools = () => chart.getDrawingTool() || chart.isEraserMode() || chart.isZoomAreaMode();
   const reserved = event => event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || tools();
@@ -77,14 +76,11 @@ export function installOrderDisplay(widget, read) {
     selected = box?.owner || null; hovered = selected; pressed = Boolean(box); tooltip.hidden = true; chart.requestRender();
   }
   function up() { pressed = false; }
-  // The widget builds its menu synchronously and only passes the rounded
-  // price. Keep the actual pointer for labels displaced away from their line.
-  function rememberContext(event) { if (host.contains(event.target)) contextEvent = event; }
-  function contextTrade() {
-    if (!contextEvent?.eventPhase || reserved(contextEvent)) return null;
-    const point = local(contextEvent);
+  function positionAt(event) {
+    if (reserved(event) || !manager.config.enabled || !chart.isTradingVisible()) return null;
+    const point = local(event);
     const box = hit(point) || lineHit(point);
-    if (box) return box;
+    if (box) return box.kind === 'position' ? box.id : null;
     // A chart press can clear the painted tags until the next frame.
     const viewport = chart.viewport.getState();
     if (!contains(viewport.chartRect, point)) return null;
@@ -95,7 +91,7 @@ export function installOrderDisplay(widget, read) {
         const distance = Math.abs(priceToY(price, viewport) - point.y);
         if (distance >= closest) continue;
         closest = distance;
-        target = { kind: 'position', id: row.id };
+        target = row.id;
       }
     }
     return target;
@@ -225,15 +221,13 @@ export function installOrderDisplay(widget, read) {
   window.addEventListener('pointermove', move, true); window.addEventListener('pointerdown', down, true);
   window.addEventListener('pointerup', up, true); window.addEventListener('pointercancel', clear, true); window.addEventListener('keydown', clear, true);
   host.addEventListener('pointerleave', leave); chart.on('drawingToolChange', clear); chart.on('toolModeChange', clear);
-  window.addEventListener('contextmenu', rememberContext, true);
-  const api = { hit: point => hit(point) || lineHit(point), contextTrade, destroy() {
+  const api = { hit: point => hit(point) || lineHit(point), positionAt, destroy() {
     manager.render = original.render; manager.positionRenderer.renderLines = original.positions; manager.orderRenderer.renderLines = original.orders;
     manager.positionRenderer.tags = original.positionTags; manager.orderRenderer.tags = original.orderTags;
     chart.plugins.unregister('overlay:mt5-order-labels');
     window.removeEventListener('pointermove', move, true); window.removeEventListener('pointerdown', down, true);
     window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', clear, true); window.removeEventListener('keydown', clear, true);
     host.removeEventListener('pointerleave', leave); chart.off('drawingToolChange', clear); chart.off('toolModeChange', clear);
-    window.removeEventListener('contextmenu', rememberContext, true);
     tooltip.remove(); delete widget.orderDisplay; chart.requestRender();
   } };
   widget.orderDisplay = api; chart.requestRender(); return api;

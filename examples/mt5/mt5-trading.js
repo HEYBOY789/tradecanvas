@@ -438,6 +438,21 @@ export function createMt5Trading(getActiveWidget) {
     const display = installOrderDisplay(widget, () => ({ accountId: state?.account.id, currency: state?.account.currency || '', quote: state?.quotes[widget.getSymbol()],
       orders: state?.orders.filter(row => row.symbol === widget.getSymbol()) || [],
       positions: state?.positions.filter(row => row.symbol === widget.getSymbol()) || [] }));
+    function openPositionMenu(event) {
+      if (event.target.closest('button,input,select,textarea')) return;
+      if (!widget.featureState['menu.chart']) return;
+      const positionId = display.positionAt(event);
+      const actions = positionMenuItems(widget, positionId);
+      if (!actions.length) return;
+      // Use the widget's menu sizing and keyboard handling. A position owns
+      // this click, including when a drawing happens to be behind its line.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const bounds = widget.root.getBoundingClientRect();
+      widget.menus.chartMenu.open(actions, event.clientX - bounds.left, event.clientY - bounds.top,
+        id => actions.find(action => action.id === id)?.select());
+    }
+    widget.chartContainer.addEventListener('contextmenu', openPositionMenu, true);
     const pendingStops = pendingStopHandles(widget, () => ({ orders: state?.orders.filter(row => row.symbol === widget.getSymbol()) || [],
       positions: state?.positions.filter(row => row.symbol === widget.getSymbol()) || [],
       draftPrices: ticket.read().widget === widget && ticket.read().draft?.type !== 'market'
@@ -565,23 +580,29 @@ export function createMt5Trading(getActiveWidget) {
       window.removeEventListener('keydown', escapeBracketMode); bracketModes.delete(widget);
       widget.chartContainer.removeEventListener('mousedown', preserveToolPress, true);
       widget.chartContainer.removeEventListener('touchstart', preserveToolPress, true);
+      widget.chartContainer.removeEventListener('contextmenu', openPositionMenu, true);
       pendingStops.destroy(); display.destroy(); deadlines.destroy(); preferences.destroy(); bar.remove(); chart.disconnectExecution();
     };
   }
 
-  function positionExpiryItems(owner) {
-    const target = owner?.orderDisplay?.contextTrade();
-    if (target?.kind !== 'position' || !connected) return [];
+  function positionMenuItems(owner, positionId) {
+    if (!positionId || !connected) return [];
     const accountId = state.account.id, symbol = owner.getSymbol();
-    const find = () => state?.positions.find(row => row.id === target.id && row.symbol === symbol);
+    const find = () => state?.positions.find(row => row.id === positionId && row.symbol === symbol);
     const row = find();
     if (!row) return [];
-    const action = row.expiresAt ? 'Sửa' : 'Đặt';
-    return [{ label: `${action} thời hạn vị thế #${row.id}…`, onSelect: () => {
-      const current = find();
-      if (connected && state.account.id === accountId && current) editExpiry(current, 'position', owner);
-      else report(new Error('Vị thế hoặc tài khoản MT5 đã thay đổi.'));
-    } }];
+    function withPosition(open) {
+      return () => {
+        const current = find();
+        if (connected && state.account.id === accountId && owner.getSymbol() === symbol && current) open(current);
+        else report(new Error('Vị thế hoặc tài khoản MT5 đã thay đổi.'));
+      };
+    }
+    return [
+      { id: 'editStops', label: `Sửa SL/TP vị thế #${row.id}…`, select: withPosition(current => editPosition(current).catch(report)) },
+      { id: 'editExpiry', label: `${row.expiresAt ? 'Sửa' : 'Đặt'} thời hạn vị thế #${row.id}…`,
+        select: withPosition(current => editExpiry(current, 'position', owner)) },
+    ];
   }
 
   function chartMenuItems(owner, context) {
@@ -600,13 +621,12 @@ export function createMt5Trading(getActiveWidget) {
     for (const order of state.orders.filter(row => row.symbol === symbol).slice(0, 6)) entries.push({
       label: `Sửa giá / SL / TP lệnh ${order.id}…`, onSelect: () => editOrder(order).catch(report),
     });
-    return [...positionExpiryItems(owner), ...entries];
+    return entries;
   }
 
   function drawingMenuItems(owner, context) {
-    const entries = positionExpiryItems(owner);
-    if (!owner || context.type !== 'riskReward' || context.selected.length !== 1) return entries;
-    return [...entries, { label: 'Tạo lệnh giới hạn MT5 từ vị thế…', icon: 'receipt', onSelect: async () => {
+    if (!owner || context.type !== 'riskReward' || context.selected.length !== 1) return [];
+    return [{ label: 'Tạo lệnh giới hạn MT5 từ vị thế…', icon: 'receipt', onSelect: async () => {
       try {
         if (!key) { pair(); return; }
         await refresh();
