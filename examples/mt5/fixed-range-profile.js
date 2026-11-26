@@ -21,6 +21,7 @@ const options = {
   showPercentages: toggle('Hiện % Tăng/Giảm', false),
   profileSide: choice('Vị trí histogram', 'left', [['left', 'Trái'], ['right', 'Phải']]),
   profileWidth: number('Độ rộng histogram (%)', 33, 1, 100),
+  showBorder: toggle('Hiện viền ngoài', true),
   shadeBox: toggle('Tô nền vùng đã chọn', false),
   showPoc: toggle('Hiện POC', true),
   showVah: toggle('Hiện VAH', true),
@@ -302,8 +303,10 @@ class FixedRangeProfile extends DrawingBase {
       ctx.fillRect(p.left, p.top, width, height);
     }
     if (this.option(state, 'showProfile')) this.renderHistogram(ctx, state, p, viewport.chartRect);
-    this.applyGuideStyle(ctx, state.style.color);
-    this.strokeCrispRect(ctx, p.left, p.top, width, height);
+    if (this.option(state, 'showBorder')) {
+      this.applyGuideStyle(ctx, state.style.color);
+      this.strokeCrispRect(ctx, p.left, p.top, width, height);
+    }
     ctx.globalAlpha = 1;
     if (this.option(state, 'showDevelopingPoc')) this.renderDeveloping(ctx, p, 'pocPrice', poc);
     if (this.option(state, 'showDevelopingVa')) {

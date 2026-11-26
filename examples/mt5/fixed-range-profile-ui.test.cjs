@@ -29,7 +29,12 @@ test('the existing drawing gains profile settings and restores them after reload
       return route.fulfill({ json: { server: 'Fixture', bars } });
     });
     await page.addInitScript(() => {
-      window.profilePaint = { bars: [], ratios: [] };
+      window.profilePaint = { bars: [], ratios: [], borderStrokes: 0 };
+      const stroke = CanvasRenderingContext2D.prototype.stroke;
+      CanvasRenderingContext2D.prototype.stroke = function (...args) {
+        if (this.strokeStyle === '#426e9a' && this.globalAlpha === .55) profilePaint.borderStrokes++;
+        return stroke.apply(this, args);
+      };
       const fillRect = CanvasRenderingContext2D.prototype.fillRect;
       CanvasRenderingContext2D.prototype.fillRect = function (x, y, width, height) {
         if (window.inspectVolumeRows && ['#4f91df', '#e2706b', '#38b8c8', '#ef6461'].includes(this.fillStyle)) {
@@ -68,14 +73,14 @@ test('the existing drawing gains profile settings and restores them after reload
       const a = data.at(-40), b = data.at(-8), m = data.at(-20);
       chart.setDrawings([{ id: 'old-profile', type: 'volumeProfileRange', visible: true, locked: false,
         anchors: [{ time: b.time, price: b.high }, { time: a.time, price: a.low }],
-        style: { color: '#4f91df', lineWidth: 1, lineStyle: 'dashed' } }]);
+        style: { color: '#426e9a', lineWidth: 1, lineStyle: 'dashed' } }]);
       chart.setDrawingOptions('old-profile', { source: 'chart' });
       const bounds = widget.chartContainer.getBoundingClientRect();
       const view = { ...chart.viewport.getState(), data };
       return { x: bounds.left + timeToX(m.time, view), y: bounds.top + priceToY(m.close, view),
         start: a.time, end: b.time + 300_000 };
     });
-    await page.waitForFunction(() => profilePaint.POC && profilePaint.VAH && profilePaint.VAL);
+    await page.waitForFunction(() => profilePaint.POC && profilePaint.VAH && profilePaint.VAL && profilePaint.borderStrokes >= 4);
     const chartPoc = await page.evaluate(() => profilePaint.POC.text);
     await Promise.all([
       page.waitForResponse(response => response.url().includes('/api/profile-bars?')),
@@ -95,6 +100,10 @@ test('the existing drawing gains profile settings and restores them after reload
     const settings = page.getByRole('dialog', { name: 'Fixed Range Volume Profile' });
     await settings.waitFor();
     const field = label => settings.locator('label').filter({ has: page.getByText(label, { exact: true }) });
+    const border = field('Hiện viền ngoài').getByRole('checkbox');
+    assert.equal(await border.isChecked({ timeout: 2000 }), true);
+    await border.uncheck();
+    await page.evaluate(() => { profilePaint.borderStrokes = 0; });
     const rowSize = field('Kích thước hàng').locator('input');
     assert.equal(await rowSize.inputValue(), '40');
     await field('Chia hàng theo').locator('select').selectOption('ticks');
@@ -134,18 +143,21 @@ test('the existing drawing gains profile settings and restores them after reload
     await color.fill('#a815d1');
     await settings.locator('[data-act="ok"]').click();
     await page.waitForFunction(oldX => profilePaint.POC.color === '#a815d1' && profilePaint.POC.x > oldX, beforeExtension);
+    assert.equal(await page.evaluate(() => profilePaint.borderStrokes), 0);
     const saved = await page.evaluate(() => testGrid.getLayoutSession().saveAs('Fixed range profile'));
     await page.reload();
     await ready();
     await page.evaluate(() => testReady.ready());
+    await page.waitForFunction(() => profilePaint.POC?.color === '#a815d1');
+    assert.equal(await page.evaluate(() => profilePaint.borderStrokes), 0);
     const restored = await page.evaluate(() => {
       const chart = testGrid.getWidget(0).getChart();
       const drawing = chart.getDrawings().find(d => d.id === 'old-profile');
-      const { rowMode, rowSize, volumeMode, profileSide, extendToLive, showDevelopingPoc, showPercentages, pocColor } = drawing.options;
-      return { id: testGrid.getLayoutSession().current()?.id, rowMode, rowSize, volumeMode, profileSide, extendToLive, showDevelopingPoc, showPercentages, pocColor };
+      const { rowMode, rowSize, volumeMode, profileSide, extendToLive, showDevelopingPoc, showPercentages, showBorder, pocColor } = drawing.options;
+      return { id: testGrid.getLayoutSession().current()?.id, rowMode, rowSize, volumeMode, profileSide, extendToLive, showDevelopingPoc, showPercentages, showBorder, pocColor };
     });
     assert.deepEqual(restored, { id: saved.id, rowMode: 'ticks', rowSize: 500, volumeMode: 'split', profileSide: 'right',
-      extendToLive: true, showDevelopingPoc: true, showPercentages: true, pocColor: '#a815d1' });
+      extendToLive: true, showDevelopingPoc: true, showPercentages: true, showBorder: false, pocColor: '#a815d1' });
     await page.evaluate(() => testGrid.getWidget(0).getChart().removeDrawing('old-profile'));
     assert.deepEqual(errors, []);
   } finally {
